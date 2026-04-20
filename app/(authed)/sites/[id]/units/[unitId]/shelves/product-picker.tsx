@@ -6,6 +6,7 @@ import type { ProductSummary, ShelfRow } from '@/lib/shelf/types';
 interface Props {
   products: ProductSummary[];
   targetShelf: ShelfRow | null;
+  mode: 'add' | 'assign';
   kind: 'main' | 'sub_a' | 'sub_b';
   onClose: () => void;
   onChoose: (product: ProductSummary | null) => void;
@@ -20,6 +21,7 @@ const kindLabels: Record<Props['kind'], string> = {
 export function ProductPicker({
   products,
   targetShelf,
+  mode,
   kind,
   onClose,
   onChoose,
@@ -122,7 +124,9 @@ export function ProductPicker({
                   color: 'var(--ml-text-muted)',
                 }}
               >
-                {kindLabels[kind]}
+                {mode === 'add'
+                  ? `Add slot${targetShelf ? ` · shelf ${targetShelf.shelf_order}` : ''}`
+                  : kindLabels[kind]}
               </span>
               <h2
                 style={{
@@ -132,7 +136,7 @@ export function ProductPicker({
                   color: 'var(--ml-text-primary)',
                 }}
               >
-                Pick a product
+                {mode === 'add' ? 'What goes in this slot?' : 'Pick a product'}
               </h2>
             </div>
             <button
@@ -331,11 +335,12 @@ export function ProductPicker({
               border: 0,
               fontSize: 12,
               fontWeight: 500,
-              color: 'var(--ml-red)',
+              color: mode === 'add' ? 'var(--ml-charcoal)' : 'var(--ml-red)',
               cursor: 'pointer',
+              textDecoration: 'underline',
             }}
           >
-            Clear this assignment
+            {mode === 'add' ? 'Add slot without a product' : 'Clear this assignment'}
           </button>
           <span style={{ fontSize: 11, color: 'var(--ml-text-muted)' }}>
             Esc to close

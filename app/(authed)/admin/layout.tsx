@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireRole } from '@/lib/auth/require-role';
+import { PageFrame } from '@/components/brand/PageFrame';
 
 /**
  * Admin shell. HQ Admin only. Anyone else gets a 404 — we don't announce
@@ -18,6 +19,7 @@ export default async function AdminLayout({
   }
 
   return (
+    <PageFrame>
     <section style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div
         style={{
@@ -60,6 +62,7 @@ export default async function AdminLayout({
 
       {children}
     </section>
+    </PageFrame>
   );
 }
 

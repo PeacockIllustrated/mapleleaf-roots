@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { currentProfile } from '@/lib/auth/require-role';
 import { createServerClient } from '@/lib/supabase/server';
 import { NewSubmissionForm } from './new-submission-form';
+import { PageFrame } from '@/components/brand/PageFrame';
 
 type AssignedSite = { id: string; name: string; code: string };
 
@@ -30,6 +31,7 @@ export default async function NewSubmissionPage() {
   }
 
   return (
+    <PageFrame width="narrow">
     <section
       style={{
         display: 'flex',
@@ -69,5 +71,6 @@ export default async function NewSubmissionPage() {
 
       <NewSubmissionForm sites={sites} />
     </section>
+    </PageFrame>
   );
 }

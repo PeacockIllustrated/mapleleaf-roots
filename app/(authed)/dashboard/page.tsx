@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { currentProfile } from '@/lib/auth/require-role';
 import { createServerClient } from '@/lib/supabase/server';
 import { quoteStatusLabels, type QuoteStatus } from '@/lib/quote/types';
+import { PageFrame } from '@/components/brand/PageFrame';
 
 type SiteRow = {
   id: string;
@@ -87,6 +88,7 @@ export default async function DashboardPage() {
   const firstName = profile.full_name.split(' ')[0];
 
   return (
+    <PageFrame>
     <section style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
       <header style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span
@@ -389,6 +391,7 @@ export default async function DashboardPage() {
         </Panel>
       </div>
     </section>
+    </PageFrame>
   );
 }
 

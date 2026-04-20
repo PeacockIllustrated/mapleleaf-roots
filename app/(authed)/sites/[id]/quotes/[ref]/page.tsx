@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { currentProfile } from '@/lib/auth/require-role';
 import { createServerClient } from '@/lib/supabase/server';
+import { PageFrame } from '@/components/brand/PageFrame';
 import {
   quoteStatusLabels,
   type QuotePayloadV1,
@@ -55,6 +56,7 @@ export default async function QuoteDetailPage({ params }: Props) {
   );
 
   return (
+    <PageFrame>
     <section
       style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 960 }}
     >
@@ -195,6 +197,7 @@ export default async function QuoteDetailPage({ params }: Props) {
         }))}
       />
     </section>
+    </PageFrame>
   );
 }
 

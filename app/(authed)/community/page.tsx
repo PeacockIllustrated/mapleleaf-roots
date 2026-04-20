@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { currentProfile } from '@/lib/auth/require-role';
 import { createServerClient } from '@/lib/supabase/server';
+import { PageFrame } from '@/components/brand/PageFrame';
 
 type SubmissionRow = {
   id: string;
@@ -71,6 +72,7 @@ export default async function CommunityPage() {
   const canSubmit = (assignmentCount ?? 0) > 0;
 
   return (
+    <PageFrame>
     <section
       style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 960 }}
     >
@@ -276,6 +278,7 @@ export default async function CommunityPage() {
         </ul>
       )}
     </section>
+    </PageFrame>
   );
 }
 

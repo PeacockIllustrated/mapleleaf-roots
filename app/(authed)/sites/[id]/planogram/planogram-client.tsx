@@ -311,8 +311,10 @@ export function PlanogramClient({
         display: 'flex',
         flexDirection: 'column',
         gap: 14,
-        height: 'calc(100vh - 88px)',
-        minHeight: 560,
+        height: '100vh',
+        padding: '22px 28px 20px',
+        boxSizing: 'border-box',
+        minHeight: 620,
       }}
     >
       <header

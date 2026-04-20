@@ -15,6 +15,8 @@ interface Props {
   slot: ShelfSlot | null;
   canEdit: boolean;
   promoSections: PromoSectionSummary[];
+  unitWidthMm: number;
+  usedOnShelfMm: number;
   onUpdate:
     | ((patch: {
         widthMm?: number;
@@ -22,6 +24,7 @@ interface Props {
         currentlyStocking?: SlotStockingState;
       }) => void)
     | undefined;
+  onAdjustFacings: ((delta: 1 | -1) => void) | undefined;
   onDelete: (() => void) | undefined;
   onPickProduct: (slotId: string, kind: 'main' | 'sub_a' | 'sub_b') => void;
   onClose: () => void;
@@ -48,22 +51,19 @@ export function SlotInspector({
   shelf,
   slot,
   canEdit,
+  unitWidthMm,
+  usedOnShelfMm,
   onUpdate,
+  onAdjustFacings,
   onDelete,
   onPickProduct,
   onClose,
 }: Props) {
   const [width, setWidth] = useState(slot ? String(slot.width_mm) : '');
-  const [facings, setFacings] = useState(
-    slot ? String(slot.facing_count) : ''
-  );
 
   useEffect(() => {
-    if (slot) {
-      setWidth(String(slot.width_mm));
-      setFacings(String(slot.facing_count));
-    }
-  }, [slot?.id, slot?.width_mm, slot?.facing_count]);
+    if (slot) setWidth(String(slot.width_mm));
+  }, [slot?.id, slot?.width_mm]);
 
   if (!slot || !shelf) {
     return (
@@ -92,16 +92,6 @@ export function SlotInspector({
     onUpdate?.({ widthMm: parsed });
   }
 
-  function commitFacings() {
-    const parsed = Number.parseInt(facings, 10);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      setFacings(String(slot!.facing_count));
-      return;
-    }
-    if (parsed === slot!.facing_count) return;
-    onUpdate?.({ facingCount: parsed });
-  }
-
   const mainProduct = slot.assignment?.main ?? null;
   const subAProduct = slot.assignment?.sub_a ?? null;
   const subBProduct = slot.assignment?.sub_b ?? null;
@@ -124,30 +114,41 @@ export function SlotInspector({
       </div>
 
       <div style={body}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <Field label="Width (mm)">
-            <input
-              type="number"
-              inputMode="numeric"
-              value={width}
-              onChange={(e) => setWidth(e.target.value)}
-              onBlur={commitWidth}
-              disabled={!canEdit}
-              style={input}
-            />
-          </Field>
-          <Field label="Facings">
-            <input
-              type="number"
-              inputMode="numeric"
-              value={facings}
-              onChange={(e) => setFacings(e.target.value)}
-              onBlur={commitFacings}
-              disabled={!canEdit}
-              style={input}
-            />
-          </Field>
-        </div>
+        <ShelfBudget
+          unitWidthMm={unitWidthMm}
+          usedMm={usedOnShelfMm}
+        />
+
+        <Field label="Facings">
+          <FacingControl
+            value={slot.facing_count}
+            canEdit={canEdit}
+            widthMm={slot.width_mm}
+            facingWidthMm={slot.assignment?.main?.width_mm ?? null}
+            onAdjust={(delta) => onAdjustFacings?.(delta)}
+          />
+        </Field>
+
+        <Field label="Width (mm)">
+          <input
+            type="number"
+            inputMode="numeric"
+            value={width}
+            onChange={(e) => setWidth(e.target.value)}
+            onBlur={commitWidth}
+            disabled={!canEdit}
+            style={input}
+          />
+          <span
+            style={{
+              fontSize: 10,
+              color: 'var(--ml-text-muted)',
+              marginTop: 2,
+            }}
+          >
+            Auto-computed from product × facings when a main product is set.
+          </span>
+        </Field>
 
         <SectionHeader title="Products" />
         <ProductPick
@@ -355,6 +356,168 @@ function SectionHeader({ title }: { title: string }) {
     >
       {title}
     </span>
+  );
+}
+
+function ShelfBudget({
+  unitWidthMm,
+  usedMm,
+}: {
+  unitWidthMm: number;
+  usedMm: number;
+}) {
+  const remaining = Math.max(0, unitWidthMm - usedMm);
+  const pct = Math.min(100, Math.round((usedMm / unitWidthMm) * 100));
+  const over = usedMm > unitWidthMm;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          gap: 8,
+        }}
+      >
+        <span style={sectionLabel}>Shelf fill</span>
+        <span
+          style={{
+            fontSize: 11,
+            color: over ? 'var(--ml-red)' : 'var(--ml-text-muted)',
+            fontFamily: 'ui-monospace, "SFMono-Regular", Menlo, monospace',
+          }}
+        >
+          {usedMm}/{unitWidthMm} mm · {remaining} free
+        </span>
+      </div>
+      <div
+        style={{
+          height: 6,
+          borderRadius: 999,
+          background: 'var(--ml-surface-muted)',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            width: `${Math.min(100, pct)}%`,
+            height: '100%',
+            background: over ? 'var(--ml-red)' : 'var(--ml-charcoal)',
+            transition: 'width var(--ml-motion-base) var(--ml-ease-out)',
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FacingControl({
+  value,
+  canEdit,
+  widthMm,
+  facingWidthMm,
+  onAdjust,
+}: {
+  value: number;
+  canEdit: boolean;
+  widthMm: number;
+  facingWidthMm: number | null;
+  onAdjust: (delta: 1 | -1) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <StepButton
+        label="−"
+        onClick={() => onAdjust(-1)}
+        disabled={!canEdit || value <= 1}
+        aria="Remove a facing"
+      />
+      <div
+        style={{
+          minWidth: 74,
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+            color: 'var(--ml-text-primary)',
+            lineHeight: 1,
+          }}
+        >
+          {value}
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            color: 'var(--ml-text-muted)',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {value === 1 ? 'facing' : 'facings'}
+        </span>
+      </div>
+      <StepButton
+        label="+"
+        onClick={() => onAdjust(1)}
+        disabled={!canEdit}
+        aria="Add a facing"
+      />
+      <span
+        style={{
+          marginLeft: 'auto',
+          fontSize: 11,
+          color: 'var(--ml-text-muted)',
+          fontFamily: 'ui-monospace, "SFMono-Regular", Menlo, monospace',
+        }}
+      >
+        {facingWidthMm ? `${facingWidthMm} mm/facing` : `${widthMm} mm total`}
+      </span>
+    </div>
+  );
+}
+
+function StepButton({
+  label,
+  onClick,
+  disabled,
+  aria,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  aria: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={aria}
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: 'var(--ml-radius-md)',
+        background: 'var(--ml-off-white)',
+        color: 'var(--ml-charcoal)',
+        border: '0.5px solid var(--ml-border-default)',
+        fontFamily: 'inherit',
+        fontSize: 17,
+        fontWeight: 500,
+        lineHeight: 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
+        transition: 'background var(--ml-motion-fast) var(--ml-ease-out)',
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

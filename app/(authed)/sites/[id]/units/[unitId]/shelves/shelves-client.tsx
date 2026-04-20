@@ -27,10 +27,19 @@ interface Props {
   canEdit: boolean;
 }
 
-type PickerTarget = {
-  slotId: string;
-  kind: 'main' | 'sub_a' | 'sub_b';
-} | null;
+type PickerTarget =
+  | {
+      mode: 'assign';
+      slotId: string;
+      kind: 'main' | 'sub_a' | 'sub_b';
+    }
+  | {
+      mode: 'add';
+      shelfId: string;
+    }
+  | null;
+
+const EMPTY_SLOT_DEFAULT_MM = 200;
 
 type Toast = { kind: 'success' | 'error'; message: string } | null;
 
@@ -97,34 +106,105 @@ export function ShelvesClient({
     }));
   }, []);
 
-  const onAddSlot = useCallback(
-    async (shelfId: string, widthMm: number) => {
-      const res = await addSlotAction({
-        siteId: unit.site_id,
-        unitId: unit.id,
-        shelfId,
-        widthMm,
-        facingCount: 1,
-      });
+  // Entry point from the canvas: open the product picker instead of
+  // prompting for a width. The picker lets the user pick a product (and
+  // auto-compute width) or fall back to an empty-placeholder slot.
+  const onAddSlot = useCallback((shelfId: string) => {
+    setPicker({ mode: 'add', shelfId });
+  }, []);
+
+  // After the user makes a choice in 'add' mode, create the slot with the
+  // right width based on product × facings, or a default empty width.
+  const commitAddSlot = useCallback(
+    async (shelfId: string, product: ProductSummary | null) => {
+      const shelf = unit.shelves.find((s) => s.id === shelfId);
+      const usedMm =
+        shelf?.slots.reduce((acc, s) => acc + s.width_mm, 0) ?? 0;
+      const remainingMm = Math.max(0, unit.width_mm - usedMm);
+
+      const payload = product
+        ? {
+            siteId: unit.site_id,
+            unitId: unit.id,
+            shelfId,
+            mainProductId: product.id,
+            facingCount: 1,
+          }
+        : {
+            siteId: unit.site_id,
+            unitId: unit.id,
+            shelfId,
+            widthMm: Math.min(EMPTY_SLOT_DEFAULT_MM, Math.max(40, remainingMm)),
+            facingCount: 1,
+          };
+
+      const res = await addSlotAction(payload);
       if (!res.ok) {
         setToast({ kind: 'error', message: res.message });
         return;
       }
-      const shelf = unit.shelves.find((s) => s.id === shelfId);
+
       const nextOrder =
-        (shelf?.slots.reduce((acc, s) => Math.max(acc, s.slot_order), 0) ?? 0) + 1;
+        (shelf?.slots.reduce((acc, s) => Math.max(acc, s.slot_order), 0) ?? 0) +
+        1;
+
       pushSlot(shelfId, {
         id: res.data.id,
         shelf_id: shelfId,
         slot_order: nextOrder,
-        width_mm: widthMm,
-        facing_count: 1,
-        currently_stocking: 'EMPTY',
-        assignment: null,
+        width_mm: res.data.widthMm,
+        facing_count: res.data.facingCount,
+        currently_stocking: product ? 'MAIN' : 'EMPTY',
+        assignment: product
+          ? {
+              id: 'pending',
+              main: product,
+              sub_a: null,
+              sub_b: null,
+            }
+          : null,
       });
       setSelectedSlotId(res.data.id);
     },
-    [unit.id, unit.site_id, unit.shelves, pushSlot]
+    [unit.id, unit.site_id, unit.shelves, unit.width_mm, pushSlot]
+  );
+
+  const onAdjustFacings = useCallback(
+    async (slotId: string, delta: 1 | -1) => {
+      const slot = (() => {
+        for (const sh of unit.shelves) {
+          for (const s of sh.slots) if (s.id === slotId) return s;
+        }
+        return null;
+      })();
+      if (!slot) return;
+
+      const nextCount = Math.max(1, Math.min(60, slot.facing_count + delta));
+      if (nextCount === slot.facing_count) return;
+
+      const mainProduct = slot.assignment?.main ?? null;
+      const baseWidth =
+        (mainProduct?.width_mm as number | null | undefined) ?? null;
+      const nextWidth =
+        baseWidth && baseWidth > 0
+          ? baseWidth * nextCount
+          : // No main product — scale proportionally from current.
+            Math.round(
+              (slot.width_mm / slot.facing_count) * nextCount
+            );
+
+      patchSlot(slotId, { facing_count: nextCount, width_mm: nextWidth });
+
+      const res = await updateSlotAction({
+        siteId: unit.site_id,
+        unitId: unit.id,
+        slotId,
+        widthMm: nextWidth,
+        facingCount: nextCount,
+      });
+      if (!res.ok) setToast({ kind: 'error', message: res.message });
+    },
+    [unit.id, unit.site_id, unit.shelves, patchSlot]
   );
 
   const onUpdateSlot = useCallback(
@@ -173,7 +253,7 @@ export function ShelvesClient({
 
   const openPicker = useCallback(
     (slotId: string, kind: 'main' | 'sub_a' | 'sub_b') => {
-      setPicker({ slotId, kind });
+      setPicker({ mode: 'assign', slotId, kind });
     },
     []
   );
@@ -181,6 +261,13 @@ export function ShelvesClient({
   const onPickerChoose = useCallback(
     async (product: ProductSummary | null) => {
       if (!picker) return;
+
+      if (picker.mode === 'add') {
+        setPicker(null);
+        await commitAddSlot(picker.shelfId, product);
+        return;
+      }
+
       const { slotId, kind } = picker;
       setPicker(null);
 
@@ -217,7 +304,7 @@ export function ShelvesClient({
       const res = await assignSlotProducts(payload);
       if (!res.ok) setToast({ kind: 'error', message: res.message });
     },
-    [picker, unit.id, unit.site_id]
+    [picker, unit.id, unit.site_id, commitAddSlot]
   );
 
   const totalSlotWidthByShelf = useMemo(() => {
@@ -236,9 +323,11 @@ export function ShelvesClient({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
-        height: 'calc(100vh - 88px)',
-        minHeight: 560,
+        gap: 14,
+        height: '100vh',
+        padding: '22px 28px 20px',
+        boxSizing: 'border-box',
+        minHeight: 620,
       }}
     >
       <header style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -296,8 +385,17 @@ export function ShelvesClient({
           slot={selectedSlot}
           canEdit={canEdit}
           promoSections={promoSections}
+          unitWidthMm={unit.width_mm}
+          usedOnShelfMm={
+            selectedShelf
+              ? totalSlotWidthByShelf.get(selectedShelf.id) ?? 0
+              : 0
+          }
           onUpdate={(patch) =>
             selectedSlot ? onUpdateSlot(selectedSlot.id, patch) : undefined
+          }
+          onAdjustFacings={(delta) =>
+            selectedSlot ? onAdjustFacings(selectedSlot.id, delta) : undefined
           }
           onDelete={() =>
             selectedSlot ? onDeleteSlot(selectedSlot.id) : undefined
@@ -307,15 +405,25 @@ export function ShelvesClient({
         />
       </div>
 
-      {picker && (
-        <ProductPicker
-          products={products}
-          targetShelf={selectedShelf}
-          kind={picker.kind}
-          onClose={() => setPicker(null)}
-          onChoose={onPickerChoose}
-        />
-      )}
+      {picker &&
+        (() => {
+          const contextShelf =
+            picker.mode === 'add'
+              ? unit.shelves.find((s) => s.id === picker.shelfId) ?? null
+              : selectedShelf;
+          const kind: 'main' | 'sub_a' | 'sub_b' =
+            picker.mode === 'add' ? 'main' : picker.kind;
+          return (
+            <ProductPicker
+              products={products}
+              targetShelf={contextShelf}
+              mode={picker.mode}
+              kind={kind}
+              onClose={() => setPicker(null)}
+              onChoose={onPickerChoose}
+            />
+          );
+        })()}
 
       {toast && (
         <div

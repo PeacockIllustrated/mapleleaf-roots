@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { currentProfile } from '@/lib/auth/require-role';
 import { createServerClient } from '@/lib/supabase/server';
 import { ClassificationTags } from './classification-tags';
+import { PageFrame } from '@/components/brand/PageFrame';
 
 type Site = {
   id: string;
@@ -93,6 +94,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
     profile.role === 'SITE_MANAGER';
 
   return (
+    <PageFrame>
     <section
       style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 960 }}
     >
@@ -247,6 +249,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
         />
       </div>
     </section>
+    </PageFrame>
   );
 }
 

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { currentProfile } from '@/lib/auth/require-role';
 import { createServerClient } from '@/lib/supabase/server';
 import { quoteStatusLabels, type QuoteStatus } from '@/lib/quote/types';
+import { PageFrame } from '@/components/brand/PageFrame';
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -46,6 +47,7 @@ export default async function QuotesListPage({ params }: Props) {
   const rows = (quotes ?? []) as QuoteRow[];
 
   return (
+    <PageFrame>
     <section
       style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 900 }}
     >
@@ -157,6 +159,7 @@ export default async function QuotesListPage({ params }: Props) {
         </div>
       )}
     </section>
+    </PageFrame>
   );
 }
 

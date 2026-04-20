@@ -40,11 +40,10 @@ export default async function AuthedLayout({
         style={{
           flex: 1,
           minWidth: 0,
-          padding: '28px 32px 48px',
           overflowX: 'hidden',
         }}
       >
-        <div style={{ maxWidth: 1440, margin: '0 auto' }}>{children}</div>
+        {children}
       </main>
     </div>
   );

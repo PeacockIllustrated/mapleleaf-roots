@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { currentProfile } from '@/lib/auth/require-role';
 import { createServerClient } from '@/lib/supabase/server';
 import { InviteForm } from './invite-form';
+import { PageFrame } from '@/components/brand/PageFrame';
 
 type Area = { id: string; code: string; name: string };
 type Site = { id: string; code: string; name: string };
@@ -119,6 +120,7 @@ export default async function TeamPage() {
       : ['EMPLOYEE'];
 
   return (
+    <PageFrame width="narrow">
     <section
       style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 1040 }}
     >
@@ -274,5 +276,6 @@ export default async function TeamPage() {
         )}
       </div>
     </section>
+    </PageFrame>
   );
 }

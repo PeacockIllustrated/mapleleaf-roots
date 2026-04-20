@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { currentProfile } from '@/lib/auth/require-role';
 import { createServerClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { PageFrame } from '@/components/brand/PageFrame';
 
 /**
  * /sites — sites the current user can access.
@@ -53,6 +54,7 @@ export default async function SitesPage() {
   const sites = (data ?? []) as SiteRow[];
 
   return (
+    <PageFrame>
     <section style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <header
         style={{
@@ -215,5 +217,6 @@ export default async function SitesPage() {
         </ul>
       )}
     </section>
+    </PageFrame>
   );
 }

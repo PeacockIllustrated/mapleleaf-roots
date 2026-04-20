@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { requireRole } from '@/lib/auth/require-role';
 import { createServerClient } from '@/lib/supabase/server';
 import { NewSiteForm } from './new-site-form';
+import { PageFrame } from '@/components/brand/PageFrame';
 
 type AreaOption = { id: string; code: string; name: string };
 
@@ -47,6 +48,7 @@ export default async function NewSitePage() {
   }
 
   return (
+    <PageFrame width="narrow">
     <section style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 680 }}>
       <header style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <h1
@@ -90,5 +92,6 @@ export default async function NewSitePage() {
         <NewSiteForm areas={areas} />
       )}
     </section>
+    </PageFrame>
   );
 }

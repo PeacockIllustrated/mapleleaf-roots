@@ -19,7 +19,11 @@ const addSlotSchema = z.object({
   siteId: z.string().uuid(),
   unitId: z.string().uuid(),
   shelfId: z.string().uuid(),
-  widthMm: z.number().int().positive().max(5000),
+  // When mainProductId is supplied, the server computes width_mm from the
+  // product's own width_mm × facingCount. For empty placeholder slots the
+  // caller passes widthMm directly.
+  mainProductId: z.string().uuid().nullable().optional(),
+  widthMm: z.number().int().positive().max(5000).optional(),
   facingCount: z.number().int().positive().max(60).default(1),
 });
 
@@ -42,15 +46,53 @@ const deleteSlotSchema = z.object({
 
 export async function addSlot(
   input: unknown
-): Promise<ShelfActionResult<{ id: string }>> {
-  await requireRole(WRITE_ROLES);
+): Promise<
+  ShelfActionResult<{ id: string; widthMm: number; facingCount: number }>
+> {
+  const caller = await requireRole(WRITE_ROLES);
   const parsed = addSlotSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? 'Bad input' };
   }
   const v = parsed.data;
 
+  if (!v.mainProductId && v.widthMm === undefined) {
+    return {
+      ok: false,
+      message: 'Specify either a main product or an explicit width.',
+    };
+  }
+
   const supabase = await createServerClient();
+
+  // If a product is supplied, compute width from its own width × facings.
+  let resolvedWidth = v.widthMm ?? 0;
+  if (v.mainProductId) {
+    const { data: product, error: prodErr } = await supabase
+      .from('products')
+      .select('width_mm')
+      .eq('id', v.mainProductId)
+      .single();
+    if (prodErr || !product) {
+      return {
+        ok: false,
+        message: prodErr?.message ?? 'Main product not found',
+      };
+    }
+    const pw = (product.width_mm as number | null) ?? 0;
+    if (pw <= 0) {
+      return {
+        ok: false,
+        message:
+          'That product has no width recorded. Either pick another product or add an empty slot.',
+      };
+    }
+    resolvedWidth = pw * v.facingCount;
+  }
+
+  if (!Number.isFinite(resolvedWidth) || resolvedWidth <= 0) {
+    return { ok: false, message: 'Resolved slot width is invalid.' };
+  }
 
   // Next slot_order for this shelf.
   const { data: last } = await supabase
@@ -68,9 +110,9 @@ export async function addSlot(
     .insert({
       site_unit_shelf_id: v.shelfId,
       slot_order: nextOrder,
-      width_mm: v.widthMm,
+      width_mm: Math.round(resolvedWidth),
       facing_count: v.facingCount,
-      currently_stocking: 'EMPTY',
+      currently_stocking: v.mainProductId ? 'MAIN' : 'EMPTY',
     })
     .select('id')
     .single();
@@ -79,8 +121,30 @@ export async function addSlot(
     return { ok: false, message: error?.message ?? 'Insert failed' };
   }
 
+  // Persist the main product assignment in the same round-trip.
+  if (v.mainProductId) {
+    const { error: assignErr } = await supabase
+      .from('slot_product_assignments')
+      .insert({
+        site_unit_slot_id: data.id,
+        main_product_id: v.mainProductId,
+        assigned_by: caller.id,
+        assigned_at: new Date().toISOString(),
+      });
+    if (assignErr) {
+      return { ok: false, message: assignErr.message };
+    }
+  }
+
   revalidatePath(`/sites/${v.siteId}/units/${v.unitId}/shelves`);
-  return { ok: true, data: { id: data.id as string } };
+  return {
+    ok: true,
+    data: {
+      id: data.id as string,
+      widthMm: Math.round(resolvedWidth),
+      facingCount: v.facingCount,
+    },
+  };
 }
 
 export async function updateSlot(
