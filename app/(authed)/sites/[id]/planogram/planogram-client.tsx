@@ -425,6 +425,7 @@ export function PlanogramClient({
           shopBounds={shopBounds}
         />
         <UnitInspector
+          siteId={siteId}
           promoSections={promoSections}
           canEdit={canEdit}
           onUpdate={onInspectorUpdate}

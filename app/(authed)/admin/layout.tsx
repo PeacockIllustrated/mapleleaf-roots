@@ -54,6 +54,7 @@ export default async function AdminLayout({
             href="/admin/library/promo-sections"
             label="Promo sections"
           />
+          <AdminTab href="/admin/library/products" label="Products" />
         </nav>
       </div>
 

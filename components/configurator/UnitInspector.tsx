@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useConfigurator } from '@/lib/configurator/store';
 import type {
@@ -10,6 +11,7 @@ import type {
 } from '@/lib/configurator/types';
 
 interface Props {
+  siteId: string;
   promoSections: PromoSectionSummary[];
   canEdit: boolean;
   onUpdate: (args: {
@@ -40,6 +42,7 @@ interface Props {
  * with an "add shelf" affordance, and a read-only POS positions list.
  */
 export function UnitInspector({
+  siteId,
   promoSections,
   canEdit,
   onUpdate,
@@ -140,6 +143,19 @@ export function UnitInspector({
           {unit.unit_type.code} · {unit.unit_type.width_mm} ×{' '}
           {unit.unit_type.depth_mm} × {unit.unit_type.height_mm} mm
         </span>
+        <Link
+          href={`/sites/${siteId}/units/${unit.id}/shelves`}
+          style={{
+            marginTop: 6,
+            fontSize: 12,
+            fontWeight: 500,
+            color: 'var(--ml-red)',
+            textDecoration: 'none',
+            letterSpacing: '0.01em',
+          }}
+        >
+          Open shelves →
+        </Link>
       </div>
 
       <div
