@@ -20,6 +20,12 @@ const items: readonly Item[] = [
     visibleTo: ['HQ_ADMIN', 'AREA_MANAGER', 'SITE_MANAGER', 'EMPLOYEE'],
   },
   {
+    href: '/team',
+    label: 'Team',
+    match: (p) => p.startsWith('/team'),
+    visibleTo: ['HQ_ADMIN', 'AREA_MANAGER', 'SITE_MANAGER'],
+  },
+  {
     href: '/community',
     label: 'Community',
     match: (p) => p.startsWith('/community'),
