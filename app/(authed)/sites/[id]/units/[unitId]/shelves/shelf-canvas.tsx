@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import type { PromoSectionSummary } from '@/lib/configurator/types';
-import type { ShelfRow, ShelfSlot, UnitWithShelves } from '@/lib/shelf/types';
+import type {
+  ShelfRow,
+  ShelfSlot,
+  UnitPosSlot,
+  UnitWithShelves,
+} from '@/lib/shelf/types';
 
 interface Props {
   unit: UnitWithShelves;
@@ -14,17 +19,33 @@ interface Props {
   onAddSlot: (shelfId: string) => void;
 }
 
-const HEADER_MM = 80;
-const PLINTH_MM = 140;
-const SHELF_THICKNESS_MM = 16;
+const HEADER_MM = 360;
+const PLINTH_MM = 160;
+const SHELF_THICKNESS_MM = 14;
+const SHELF_EDGE_MM = 40; // front price-strip zone below each slot row
+const GUTTER_MM = 60; // left-of-unit for shelf numbers; right-of-unit for budget pill
 
 /**
- * ShelfCanvas — SVG elevation view of a single unit.
+ * ShelfCanvas — elevation view of a single unit.
  *
- * Coordinate system is mm (viewBox = unit width × unit height). Each slot
- * renders one rectangle per facing with a thin divider, matching real shelf
- * planograms. The slot zone above each shelf can be tinted by the shelf's
- * promo section for at-a-glance zoning.
+ * Vertical anatomy (top → bottom):
+ *
+ *   ┌─ HEADER zone ──────────────────────────────────────┐
+ *   │   UNIT name band + framed POS poster placeholder   │
+ *   ├────────────────────────────────────────────────────┤
+ *   │   Shelf N slot zone (products on shelf N)          │
+ *   │   Shelf N edge strip (price strip + promo)         │
+ *   │   Shelf N plate (charcoal band)                    │
+ *   │   … repeat for each shelf …                        │
+ *   ├────────────────────────────────────────────────────┤
+ *   │   Base plinth                                      │
+ *   └────────────────────────────────────────────────────┘
+ *
+ * The unit type's POS positions (HEADER_BOARD_* etc) are rendered as
+ * sized rectangles inside the header zone so the user can see the
+ * printable real estate. Each shelf's edge strip is tinted by its promo
+ * section, giving somewhere for price cards and wobbler design to live
+ * visually without cluttering the product zone.
  */
 export function ShelfCanvas({
   unit,
@@ -44,19 +65,40 @@ export function ShelfCanvas({
   const layout = useMemo(() => {
     let cursor = HEADER_MM;
     const rows = unit.shelves.map((s) => {
-      const slotTopY = cursor;
-      const slotBottomY = cursor + s.clearance_mm;
-      const plateTopY = slotBottomY;
+      const zoneTopY = cursor;
+      const zoneBottomY = cursor + s.clearance_mm;
+      const edgeTopY = zoneBottomY - SHELF_EDGE_MM;
+      const plateTopY = zoneBottomY;
       const plateBottomY = plateTopY + SHELF_THICKNESS_MM;
       cursor = plateBottomY;
-      return { shelf: s, slotTopY, slotBottomY, plateTopY, plateBottomY };
+      return {
+        shelf: s,
+        zoneTopY,
+        zoneBottomY,
+        edgeTopY,
+        plateTopY,
+        plateBottomY,
+      };
     });
     const totalUsedMm = cursor + PLINTH_MM;
     return { rows, totalUsedMm };
   }, [unit.shelves]);
 
   const unitHeight = Math.max(unit.height_mm, layout.totalUsedMm);
-  const unitFillOutside = '#F5F2EE';
+
+  const headerPosSlots = useMemo(
+    () =>
+      unit.pos_slots.filter(
+        (p) =>
+          /header/i.test(p.pos_slot_type.code) ||
+          /topper/i.test(p.pos_slot_type.code) ||
+          /crown/i.test(p.pos_slot_type.code)
+      ),
+    [unit.pos_slots]
+  );
+
+  const unitPromo =
+    (unit.promo_section_id && promoById.get(unit.promo_section_id)) || null;
 
   return (
     <div
@@ -107,16 +149,26 @@ export function ShelfCanvas({
       </div>
 
       <svg
-        viewBox={`-40 -10 ${unit.width_mm + 80} ${unitHeight + 20}`}
+        viewBox={`-${GUTTER_MM} -20 ${unit.width_mm + GUTTER_MM * 2} ${unitHeight + 40}`}
         preserveAspectRatio="xMidYMin meet"
         style={{
           width: '100%',
           height: 'auto',
           maxHeight: '100%',
-          background: unitFillOutside,
-          borderRadius: 6,
+          background: '#F5F2EE',
+          borderRadius: 8,
         }}
       >
+        {/* Ambient floor — softer than the frame so the unit pops */}
+        <rect
+          x={-GUTTER_MM}
+          y={unitHeight + 8}
+          width={unit.width_mm + GUTTER_MM * 2}
+          height={24}
+          fill="rgba(65, 64, 66, 0.06)"
+        />
+
+        {/* Unit frame */}
         <rect
           x={0}
           y={0}
@@ -125,69 +177,50 @@ export function ShelfCanvas({
           fill="#FFFFFF"
           stroke="#414042"
           strokeWidth={3}
+          rx={4}
+          ry={4}
         />
 
-        <rect
-          x={0}
-          y={0}
-          width={unit.width_mm}
-          height={HEADER_MM}
-          fill="#F5F2EE"
-        />
-        <text
-          x={10}
-          y={HEADER_MM / 2 + 8}
-          fontSize={28}
-          fontFamily="Poppins, system-ui, sans-serif"
-          fontWeight={500}
-          letterSpacing={2}
-          fill="#757578"
-        >
-          HEADER
-        </text>
-        <line
-          x1={0}
-          x2={unit.width_mm}
-          y1={HEADER_MM}
-          y2={HEADER_MM}
-          stroke="#414042"
-          strokeWidth={1}
+        <HeaderZone
+          widthMm={unit.width_mm}
+          unitLabel={unit.label}
+          unitTypeName={unit.unit_type_name}
+          posSlots={headerPosSlots}
+          promo={unitPromo}
         />
 
         {layout.rows.map(
-          ({ shelf, slotTopY, slotBottomY, plateTopY, plateBottomY }) => {
-            const totalSlots = totalSlotWidthByShelf.get(shelf.id) ?? 0;
-            const remaining = Math.max(0, unit.width_mm - totalSlots);
+          ({ shelf, zoneTopY, zoneBottomY, edgeTopY, plateTopY, plateBottomY }) => {
+            const usedMm = totalSlotWidthByShelf.get(shelf.id) ?? 0;
+            const remaining = Math.max(0, unit.width_mm - usedMm);
             const shelfPromo =
               (shelf.promo_section_id && promoById.get(shelf.promo_section_id)) ||
-              (unit.promo_section_id && promoById.get(unit.promo_section_id)) ||
-              null;
+              unitPromo;
 
             return (
               <g key={shelf.id}>
+                {/* Slot zone background — subtle promo wash */}
                 {shelfPromo && (
                   <rect
                     x={0}
-                    y={slotTopY}
+                    y={zoneTopY}
                     width={unit.width_mm}
-                    height={slotBottomY - slotTopY}
+                    height={zoneBottomY - zoneTopY}
                     fill={shelfPromo.hex_colour}
-                    opacity={0.06}
+                    opacity={0.05}
                   />
                 )}
 
-                {shelf.slots.reduce<{
-                  x: number;
-                  nodes: React.ReactElement[];
-                }>(
+                {/* Slots with products */}
+                {shelf.slots.reduce<{ x: number; nodes: React.ReactElement[] }>(
                   (acc, slot) => {
                     acc.nodes.push(
                       <SlotShape
                         key={slot.id}
                         slot={slot}
                         x={acc.x}
-                        topY={slotTopY}
-                        bottomY={slotBottomY}
+                        topY={zoneTopY}
+                        shelfEdgeTopY={edgeTopY}
                         selected={slot.id === selectedSlotId}
                         promoHex={shelfPromo?.hex_colour ?? null}
                         onSelect={() => onSelectSlot(slot.id)}
@@ -199,42 +232,66 @@ export function ShelfCanvas({
                   { x: 0, nodes: [] }
                 ).nodes}
 
+                {/* Add-slot affordance on the remaining span */}
                 {remaining > 0 && (
                   <AddSlotZone
-                    x={totalSlots}
-                    y={slotTopY}
+                    x={usedMm}
+                    topY={zoneTopY}
+                    shelfEdgeTopY={edgeTopY}
                     width={remaining}
-                    height={slotBottomY - slotTopY}
                     disabled={!canEdit}
                     onClick={() => onAddSlot(shelf.id)}
+                    firstOnShelf={shelf.slots.length === 0}
                   />
                 )}
 
+                {/* Shelf edge — price strip zone (front face of the plate) */}
+                <ShelfEdge
+                  x={0}
+                  y={edgeTopY}
+                  width={unit.width_mm}
+                  height={zoneBottomY - edgeTopY}
+                  promoHex={shelfPromo?.hex_colour ?? null}
+                  shelfLabel={String(shelf.shelf_order)}
+                  hasProducts={shelf.slots.some(
+                    (s) => s.assignment?.main || s.assignment?.sub_a || s.assignment?.sub_b
+                  )}
+                />
+
+                {/* Shelf plate */}
                 <rect
                   x={0}
                   y={plateTopY}
                   width={unit.width_mm}
                   height={plateBottomY - plateTopY}
-                  fill="#414042"
+                  fill="#3A393B"
+                />
+                <rect
+                  x={0}
+                  y={plateTopY}
+                  width={unit.width_mm}
+                  height={1}
+                  fill="rgba(255, 255, 255, 0.12)"
                 />
 
+                {/* Shelf index in the left gutter */}
                 <text
-                  x={-10}
-                  y={slotBottomY - 4}
-                  fontSize={14}
+                  x={-14}
+                  y={(zoneTopY + zoneBottomY) / 2 + 5}
+                  fontSize={16}
                   fontFamily="Poppins, system-ui, sans-serif"
                   fontWeight={500}
                   textAnchor="end"
-                  fill="#414042"
+                  fill="#9A9A9A"
                 >
                   {shelf.shelf_order}
                 </text>
 
+                {/* Shelf budget pill in the right gutter */}
                 <ShelfBudgetPill
-                  shelfId={shelf.id}
-                  x={unit.width_mm + 8}
-                  y={slotTopY + 8}
-                  usedMm={totalSlots}
+                  x={unit.width_mm + 12}
+                  y={(zoneTopY + zoneBottomY) / 2 - 12}
+                  usedMm={usedMm}
                   totalMm={unit.width_mm}
                 />
               </g>
@@ -242,12 +299,20 @@ export function ShelfCanvas({
           }
         )}
 
+        {/* Base plinth */}
         <rect
           x={0}
           y={unitHeight - PLINTH_MM}
           width={unit.width_mm}
           height={PLINTH_MM}
-          fill="#F5F2EE"
+          fill="#ECE9E2"
+        />
+        <rect
+          x={0}
+          y={unitHeight - PLINTH_MM}
+          width={unit.width_mm}
+          height={1}
+          fill="rgba(65, 64, 66, 0.18)"
         />
       </svg>
     </div>
@@ -255,12 +320,241 @@ export function ShelfCanvas({
 }
 
 // ---------------------------------------------------------------------------
+// Header zone — unit name strip + framed POS poster placeholders
+// ---------------------------------------------------------------------------
+
+function HeaderZone({
+  widthMm,
+  unitLabel,
+  unitTypeName,
+  posSlots,
+  promo,
+}: {
+  widthMm: number;
+  unitLabel: string;
+  unitTypeName: string;
+  posSlots: UnitPosSlot[];
+  promo: PromoSectionSummary | null;
+}) {
+  const titleStripMm = 48;
+  const frameTop = titleStripMm + 20;
+  const frameBottom = HEADER_MM - 24;
+  const frameHeight = frameBottom - frameTop;
+  const frameWidth = widthMm - 60;
+  const frameX = (widthMm - frameWidth) / 2;
+
+  // The first "header-type" POS slot defines the paper size; if missing,
+  // we still draw a sensible placeholder so the zone feels intentional.
+  const headerSlot = posSlots[0] ?? null;
+  const posW = headerSlot?.pos_slot_type.width_mm ?? Math.min(1000, widthMm - 120);
+  const posH = headerSlot?.pos_slot_type.height_mm ?? 250;
+
+  // Fit the paper into the frame.
+  const scale = Math.min(
+    (frameWidth - 20) / posW,
+    (frameHeight - 20) / posH
+  );
+  const paperW = posW * scale;
+  const paperH = posH * scale;
+  const paperX = frameX + (frameWidth - paperW) / 2;
+  const paperY = frameTop + (frameHeight - paperH) / 2;
+
+  return (
+    <g>
+      {/* Title strip */}
+      <rect
+        x={0}
+        y={0}
+        width={widthMm}
+        height={titleStripMm}
+        fill="#262627"
+      />
+      <text
+        x={18}
+        y={titleStripMm / 2 + 7}
+        fontSize={22}
+        fontFamily="Poppins, system-ui, sans-serif"
+        fontWeight={500}
+        letterSpacing={1.4}
+        fill="#E6E7E7"
+      >
+        {unitLabel.toUpperCase()}
+      </text>
+      <text
+        x={widthMm - 18}
+        y={titleStripMm / 2 + 7}
+        fontSize={14}
+        fontFamily="Poppins, system-ui, sans-serif"
+        fontWeight={300}
+        letterSpacing={2.2}
+        fill="rgba(230, 231, 231, 0.7)"
+        textAnchor="end"
+      >
+        {unitTypeName.toUpperCase()}
+      </text>
+
+      {/* POS header frame (the box where the poster hangs) */}
+      <rect
+        x={frameX}
+        y={frameTop}
+        width={frameWidth}
+        height={frameHeight}
+        fill="#FAF8F4"
+        stroke="rgba(65, 64, 66, 0.2)"
+        strokeWidth={1}
+        rx={3}
+        ry={3}
+      />
+
+      {/* The poster placeholder */}
+      <g>
+        <rect
+          x={paperX}
+          y={paperY}
+          width={paperW}
+          height={paperH}
+          fill={promo?.hex_colour ?? '#FFFFFF'}
+          stroke="#414042"
+          strokeWidth={1.4}
+          rx={2}
+          ry={2}
+        />
+        {promo && (
+          <rect
+            x={paperX}
+            y={paperY}
+            width={paperW}
+            height={paperH}
+            fill="#FFFFFF"
+            opacity={0.72}
+            rx={2}
+            ry={2}
+          />
+        )}
+        <text
+          x={paperX + paperW / 2}
+          y={paperY + paperH / 2 + 2}
+          fontSize={Math.max(14, Math.min(34, paperH * 0.3))}
+          fontFamily="Poppins, system-ui, sans-serif"
+          fontWeight={700}
+          letterSpacing={1.2}
+          fill={promo ? '#414042' : '#B7B7B7'}
+          textAnchor="middle"
+        >
+          {headerSlot
+            ? headerSlot.pos_slot_type.display_name.toUpperCase()
+            : 'HEADER POSTER'}
+        </text>
+        {headerSlot && (
+          <text
+            x={paperX + paperW / 2}
+            y={paperY + paperH - 12}
+            fontSize={Math.max(9, Math.min(12, paperH * 0.12))}
+            fontFamily="ui-monospace, Menlo, monospace"
+            fill="#757578"
+            textAnchor="middle"
+          >
+            {headerSlot.pos_slot_type.width_mm}×{headerSlot.pos_slot_type.height_mm} mm ·{' '}
+            {headerSlot.pos_slot_type.default_material.toLowerCase().replace(/_/g, ' ')}
+          </text>
+        )}
+      </g>
+
+      {/* Divider between header and first slot zone */}
+      <line
+        x1={0}
+        x2={widthMm}
+        y1={HEADER_MM}
+        y2={HEADER_MM}
+        stroke="rgba(65, 64, 66, 0.3)"
+        strokeWidth={1}
+      />
+    </g>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shelf edge — price-strip zone under each slot row
+// ---------------------------------------------------------------------------
+
+function ShelfEdge({
+  x,
+  y,
+  width,
+  height,
+  promoHex,
+  shelfLabel,
+  hasProducts,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  promoHex: string | null;
+  shelfLabel: string;
+  hasProducts: boolean;
+}) {
+  const barFill = promoHex ?? '#ECE9E2';
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill={barFill}
+      />
+      {/* Subtle top + bottom highlight so it reads as a strip */}
+      <rect x={x} y={y} width={width} height={1.2} fill="rgba(0, 0, 0, 0.15)" />
+      <rect
+        x={x}
+        y={y + height - 1}
+        width={width}
+        height={1}
+        fill="rgba(255, 255, 255, 0.22)"
+      />
+      {/* Inline price-card labels: bite-sized reminders the shelf edge is live */}
+      {hasProducts && (
+        <>
+          <text
+            x={x + 10}
+            y={y + height / 2 + 5}
+            fontSize={14}
+            fontFamily="Poppins, system-ui, sans-serif"
+            fontWeight={700}
+            letterSpacing={1.6}
+            fill={promoHex ? '#414042' : '#9A9A9A'}
+          >
+            SHELF {shelfLabel}
+          </text>
+          <text
+            x={x + width - 10}
+            y={y + height / 2 + 5}
+            fontSize={11}
+            fontFamily="Poppins, system-ui, sans-serif"
+            fontWeight={500}
+            letterSpacing={1.1}
+            textAnchor="end"
+            fill={promoHex ? '#414042' : '#9A9A9A'}
+            opacity={0.82}
+          >
+            PRICE STRIP
+          </text>
+        </>
+      )}
+    </g>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Slot shape — one rectangle per facing, product image or initials fallback
+// ---------------------------------------------------------------------------
 
 interface SlotShapeProps {
   slot: ShelfSlot;
   x: number;
   topY: number;
-  bottomY: number;
+  shelfEdgeTopY: number;
   selected: boolean;
   promoHex: string | null;
   onSelect: () => void;
@@ -270,12 +564,13 @@ function SlotShape({
   slot,
   x,
   topY,
-  bottomY,
+  shelfEdgeTopY,
   selected,
   promoHex,
   onSelect,
 }: SlotShapeProps) {
   const [hover, setHover] = useState(false);
+  const bottomY = shelfEdgeTopY;
   const height = bottomY - topY;
   const width = slot.width_mm;
   const facings = Math.max(1, slot.facing_count);
@@ -287,20 +582,31 @@ function SlotShape({
     slot.assignment?.sub_b ??
     null;
 
-  const stroke = selected ? '#E12828' : hover ? '#414042' : '#8E8E90';
-  const strokeWidth = selected ? 3 : hover ? 2 : 1;
+  const outlineStroke = selected
+    ? '#E12828'
+    : hover
+    ? '#414042'
+    : 'rgba(65, 64, 66, 0.0)';
+  const outlineWidth = selected ? 3 : hover ? 1.6 : 0;
 
-  // A neutral off-white for the product box, slightly warmer on hover.
+  // Product box — slightly warm white so it lifts off a promo tint.
   const productFill = '#FFFFFF';
-  const backFill = promoHex ?? '#EDECE7';
+  const innerStroke = promoHex ?? 'rgba(65, 64, 66, 0.22)';
 
-  // Product label sizing — scales with facing width so it remains legible.
-  const labelSize = Math.max(13, Math.min(20, facingW / 11));
-  const brandSize = Math.max(10, Math.min(14, facingW / 18));
+  const labelSize = Math.max(12, Math.min(20, facingW / 12));
+  const brandSize = Math.max(10, Math.min(13, facingW / 18));
+
+  // Product box occupies the middle-ish portion of the slot zone. If the
+  // product has a height_mm, respect it (scaled); otherwise fill the zone.
+  const productBoxHeight = Math.min(
+    height - 14,
+    product?.height_mm ?? height - 14
+  );
+  const productBoxTop = bottomY - 8 - productBoxHeight;
 
   return (
     <g
-      style={{ cursor: 'pointer', transition: 'opacity 150ms' }}
+      style={{ cursor: 'pointer' }}
       onClick={(e) => {
         e.stopPropagation();
         onSelect();
@@ -308,56 +614,54 @@ function SlotShape({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <rect
-        x={x}
-        y={topY}
-        width={width}
-        height={height}
-        fill={backFill}
-        opacity={0.45}
-      />
+      {/* Hover / selection halo */}
+      {(hover || selected) && (
+        <rect
+          x={x - 1}
+          y={topY - 1}
+          width={width + 2}
+          height={height + 2}
+          fill={selected ? 'rgba(225, 40, 40, 0.04)' : 'rgba(65, 64, 66, 0.03)'}
+          rx={3}
+          ry={3}
+          pointerEvents="none"
+        />
+      )}
 
       {Array.from({ length: facings }).map((_, i) => {
         const fx = x + i * facingW;
-        const productBoxTop =
-          bottomY - Math.min(height * 0.82, product?.height_mm ?? height * 0.82);
-        const productBoxHeight = bottomY - productBoxTop - 4;
         return (
           <g key={`f-${i}`}>
-            {/* Facing product box */}
             <rect
-              x={fx + 3}
+              x={fx + 2}
               y={productBoxTop}
-              width={facingW - 6}
+              width={facingW - 4}
               height={productBoxHeight}
               fill={productFill}
-              stroke={promoHex ?? '#D6D5CF'}
+              stroke={innerStroke}
               strokeWidth={0.75}
               rx={3}
               ry={3}
             />
-            {/* Subtle inner tint for empty facings */}
-            {!product && (
-              <rect
-                x={fx + 3}
-                y={productBoxTop}
-                width={facingW - 6}
-                height={productBoxHeight}
-                fill={backFill}
-                opacity={0.35}
-                rx={3}
-                ry={3}
-                pointerEvents="none"
+            {product?.image_url && (
+              <image
+                href={product.image_url}
+                x={fx + 6}
+                y={productBoxTop + 4}
+                width={facingW - 12}
+                height={productBoxHeight - 12}
+                preserveAspectRatio="xMidYMax meet"
+                style={{ pointerEvents: 'none' }}
               />
             )}
-            {product && (
+            {product && !product.image_url && (
               <>
                 <text
                   x={fx + facingW / 2}
                   y={productBoxTop + productBoxHeight / 2 + labelSize / 3}
                   fontSize={labelSize}
                   fontFamily="Poppins, system-ui, sans-serif"
-                  fontWeight={500}
+                  fontWeight={600}
                   fill="#414042"
                   textAnchor="middle"
                   pointerEvents="none"
@@ -366,10 +670,10 @@ function SlotShape({
                 </text>
                 <text
                   x={fx + facingW / 2}
-                  y={bottomY - 8}
+                  y={productBoxTop + productBoxHeight - 6}
                   fontSize={brandSize}
                   fontFamily="Poppins, system-ui, sans-serif"
-                  fontWeight={300}
+                  fontWeight={400}
                   fill="#757578"
                   textAnchor="middle"
                   pointerEvents="none"
@@ -378,29 +682,46 @@ function SlotShape({
                 </text>
               </>
             )}
+            {!product && i === 0 && (
+              <text
+                x={x + width / 2}
+                y={productBoxTop + productBoxHeight / 2 + 5}
+                fontSize={12}
+                fontFamily="Poppins, system-ui, sans-serif"
+                fontWeight={400}
+                fill="#B7B7B7"
+                fontStyle="italic"
+                textAnchor="middle"
+                pointerEvents="none"
+              >
+                Empty slot
+              </text>
+            )}
           </g>
         );
       })}
 
-      {/* Slot outline + selection/hover ring, drawn on top */}
+      {/* Slot outline */}
       <rect
         x={x}
         y={topY}
         width={width}
         height={height}
         fill="transparent"
-        stroke={stroke}
-        strokeWidth={strokeWidth}
+        stroke={outlineStroke}
+        strokeWidth={outlineWidth}
+        rx={2}
+        ry={2}
         pointerEvents="none"
       />
 
-      {/* Slot order indicator */}
+      {/* Slot metadata */}
       <text
         x={x + 6}
         y={topY + 18}
-        fontSize={12}
+        fontSize={11}
         fontFamily="ui-monospace, Menlo, monospace"
-        fill={selected ? '#E12828' : '#757578'}
+        fill={selected ? '#E12828' : 'rgba(117, 117, 120, 0.75)'}
         pointerEvents="none"
       >
         #{slot.slot_order}
@@ -412,32 +733,18 @@ function SlotShape({
           fontSize={11}
           fontFamily="Poppins, system-ui, sans-serif"
           fontWeight={500}
-          fill="#757578"
+          fill="rgba(117, 117, 120, 0.9)"
           textAnchor="end"
           pointerEvents="none"
         >
           ×{facings}
         </text>
       )}
-
-      {!product && (
-        <text
-          x={x + width / 2}
-          y={topY + height / 2 + 4}
-          fontSize={12}
-          fontFamily="Poppins, system-ui, sans-serif"
-          fontWeight={400}
-          fill="#9A9A9A"
-          fontStyle="italic"
-          textAnchor="middle"
-          pointerEvents="none"
-        >
-          Empty slot
-        </text>
-      )}
     </g>
   );
 }
+
+// ---------------------------------------------------------------------------
 
 function initials(s: string): string {
   const parts = s.split(/\s+/).filter(Boolean);
@@ -453,25 +760,32 @@ function truncate(s: string, maxChars: number): string {
 }
 
 // ---------------------------------------------------------------------------
-
-interface AddSlotZoneProps {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  disabled: boolean;
-  onClick: () => void;
-}
+// Add-slot affordance
+// ---------------------------------------------------------------------------
 
 function AddSlotZone({
   x,
-  y,
+  topY,
+  shelfEdgeTopY,
   width,
-  height,
   disabled,
   onClick,
-}: AddSlotZoneProps) {
+  firstOnShelf,
+}: {
+  x: number;
+  topY: number;
+  shelfEdgeTopY: number;
+  width: number;
+  disabled: boolean;
+  onClick: () => void;
+  firstOnShelf: boolean;
+}) {
   const [hover, setHover] = useState(false);
+  const height = shelfEdgeTopY - topY;
+  const inset = 8;
+  const w = Math.max(0, width - inset * 2);
+  const h = Math.max(0, height - inset * 2);
+
   return (
     <g
       onMouseEnter={() => !disabled && setHover(true)}
@@ -484,32 +798,46 @@ function AddSlotZone({
       style={{ cursor: disabled ? 'default' : 'pointer' }}
     >
       <rect
-        x={x + 6}
-        y={y + 6}
-        width={Math.max(0, width - 12)}
-        height={Math.max(0, height - 12)}
-        fill={hover ? 'rgba(225, 40, 40, 0.05)' : 'transparent'}
-        stroke={disabled ? 'transparent' : hover ? '#E12828' : '#BFBFBF'}
-        strokeWidth={hover ? 1.5 : 1}
+        x={x + inset}
+        y={topY + inset}
+        width={w}
+        height={h}
+        fill={hover ? 'rgba(225, 40, 40, 0.04)' : 'rgba(65, 64, 66, 0.02)'}
+        stroke={disabled ? 'transparent' : hover ? '#E12828' : 'rgba(65, 64, 66, 0.28)'}
+        strokeWidth={hover ? 1.8 : 1}
         strokeDasharray="10 6"
-        rx={4}
-        ry={4}
-        style={{ transition: 'stroke 150ms, fill 150ms' }}
+        rx={6}
+        ry={6}
+        style={{ transition: 'stroke 180ms, fill 180ms' }}
       />
       {!disabled && (
-        <text
-          x={x + width / 2}
-          y={y + height / 2 + 6}
-          fontSize={Math.min(20, Math.max(12, height / 9))}
-          fontFamily="Poppins, system-ui, sans-serif"
-          fontWeight={500}
-          textAnchor="middle"
-          fill={hover ? '#E12828' : '#757578'}
-          pointerEvents="none"
-          style={{ transition: 'fill 150ms' }}
-        >
-          + Add slot
-        </text>
+        <g pointerEvents="none">
+          <text
+            x={x + width / 2}
+            y={topY + h / 2 + (firstOnShelf ? -4 : 6)}
+            fontSize={Math.min(22, Math.max(13, h / 9))}
+            fontFamily="Poppins, system-ui, sans-serif"
+            fontWeight={500}
+            textAnchor="middle"
+            fill={hover ? '#E12828' : '#8E8E90'}
+            style={{ transition: 'fill 180ms' }}
+          >
+            + Add slot
+          </text>
+          {firstOnShelf && (
+            <text
+              x={x + width / 2}
+              y={topY + h / 2 + 18}
+              fontSize={Math.min(13, Math.max(10, h / 16))}
+              fontFamily="Poppins, system-ui, sans-serif"
+              fontWeight={400}
+              textAnchor="middle"
+              fill="rgba(117, 117, 120, 0.75)"
+            >
+              Pick a product to start this shelf
+            </text>
+          )}
+        </g>
       )}
     </g>
   );
@@ -517,25 +845,22 @@ function AddSlotZone({
 
 // ---------------------------------------------------------------------------
 
-interface ShelfBudgetPillProps {
-  shelfId: string;
-  x: number;
-  y: number;
-  usedMm: number;
-  totalMm: number;
-}
-
 function ShelfBudgetPill({
   x,
   y,
   usedMm,
   totalMm,
-}: ShelfBudgetPillProps) {
+}: {
+  x: number;
+  y: number;
+  usedMm: number;
+  totalMm: number;
+}) {
   const over = usedMm > totalMm;
   const pct = Math.min(100, Math.round((usedMm / totalMm) * 100));
-  const text = `${usedMm}/${totalMm} mm · ${pct}%`;
-  const width = Math.max(110, text.length * 8);
-  const height = 22;
+  const text = `${usedMm}/${totalMm} mm`;
+  const width = 132;
+  const height = 24;
   return (
     <g>
       <rect
@@ -545,13 +870,23 @@ function ShelfBudgetPill({
         height={height}
         rx={height / 2}
         ry={height / 2}
-        fill={over ? 'rgba(225, 40, 40, 0.12)' : 'rgba(65, 64, 66, 0.08)'}
-        stroke={over ? '#E12828' : '#D6D5CF'}
-        strokeWidth={0.5}
+        fill={over ? 'rgba(225, 40, 40, 0.10)' : '#FFFFFF'}
+        stroke={over ? '#E12828' : 'rgba(65, 64, 66, 0.18)'}
+        strokeWidth={0.75}
+      />
+      {/* Inner fill bar */}
+      <rect
+        x={x + 6}
+        y={y + height - 6}
+        width={(width - 12) * (pct / 100)}
+        height={2.5}
+        rx={1.5}
+        ry={1.5}
+        fill={over ? '#E12828' : '#414042'}
       />
       <text
         x={x + width / 2}
-        y={y + height / 2 + 4}
+        y={y + height / 2 + 3}
         fontSize={11}
         fontFamily="ui-monospace, Menlo, monospace"
         fill={over ? '#E12828' : '#414042'}

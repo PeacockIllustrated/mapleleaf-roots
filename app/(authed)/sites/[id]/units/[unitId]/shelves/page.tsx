@@ -7,6 +7,7 @@ import type {
   ShelfSlot,
   SlotAssignment,
   SlotStockingState,
+  UnitPosSlot,
   UnitWithShelves,
 } from '@/lib/shelf/types';
 import type { PromoSectionSummary } from '@/lib/configurator/types';
@@ -21,6 +22,7 @@ type RawUnit = {
   label: string;
   promo_section_id: string | null;
   site_planogram_id: string;
+  unit_type_id: string;
   unit_type:
     | {
         code: string;
@@ -87,7 +89,7 @@ export default async function ShelvesPage({ params }: Props) {
   const { data: raw } = await supabase
     .from('site_units')
     .select(
-      `id, label, promo_section_id, site_planogram_id,
+      `id, label, promo_section_id, site_planogram_id, unit_type_id,
        unit_type:unit_types (
          code, display_name, width_mm, depth_mm, height_mm
        ),
@@ -162,6 +164,43 @@ export default async function ShelvesPage({ params }: Props) {
       };
     });
 
+  // POS slots the unit type carries — rendered in the header and shelf-edge
+  // zones so users can see the printable real estate at a glance.
+  const { data: posRows } = await supabase
+    .from('unit_type_pos_slots')
+    .select(
+      `id, position_label, quantity,
+       pos_slot_type:pos_slot_types (
+         code, display_name, width_mm, height_mm, mount_method, default_material
+       )`
+    )
+    .eq('unit_type_id', unit.unit_type_id);
+
+  type PosRaw = {
+    id: string;
+    position_label: string | null;
+    quantity: number;
+    pos_slot_type:
+      | UnitPosSlot['pos_slot_type']
+      | UnitPosSlot['pos_slot_type'][]
+      | null;
+  };
+
+  const posSlots: UnitPosSlot[] = ((posRows ?? []) as unknown as PosRaw[])
+    .map((r) => {
+      const pst = Array.isArray(r.pos_slot_type)
+        ? r.pos_slot_type[0]
+        : r.pos_slot_type;
+      if (!pst) return null;
+      return {
+        id: r.id,
+        position_label: r.position_label,
+        quantity: r.quantity,
+        pos_slot_type: pst,
+      } satisfies UnitPosSlot;
+    })
+    .filter((x): x is UnitPosSlot => x !== null);
+
   const unitWithShelves: UnitWithShelves = {
     id: unit.id,
     site_id: site.id as string,
@@ -174,6 +213,7 @@ export default async function ShelvesPage({ params }: Props) {
     height_mm: ut.height_mm,
     promo_section_id: unit.promo_section_id,
     shelves,
+    pos_slots: posSlots,
   };
 
   // Promo sections — for shelf colour lookups.

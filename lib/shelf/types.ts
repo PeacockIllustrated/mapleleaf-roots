@@ -46,6 +46,20 @@ export interface ShelfRow {
   slots: ShelfSlot[];
 }
 
+export interface UnitPosSlot {
+  id: string;
+  position_label: string | null;
+  quantity: number;
+  pos_slot_type: {
+    code: string;
+    display_name: string;
+    width_mm: number;
+    height_mm: number;
+    mount_method: string;
+    default_material: string;
+  };
+}
+
 export interface UnitWithShelves {
   id: string;
   site_id: string;
@@ -58,4 +72,5 @@ export interface UnitWithShelves {
   height_mm: number;
   promo_section_id: string | null;
   shelves: ShelfRow[];
+  pos_slots: UnitPosSlot[];
 }
