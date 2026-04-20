@@ -39,25 +39,74 @@ predecessor.
 5. `pnpm typecheck` — should be silent.
 6. `pnpm dev` and open `http://localhost:3000`.
 
-### Sign in without waiting for an email
+### Bootstrap the HQ Admin user
 
-If your Supabase project hasn't yet whitelisted `localhost:3000/auth/callback`:
+Paste this into the Supabase SQL editor once per project (local, staging,
+prod). It creates the seed HQ Admin with a password — everyone else is
+invited from inside the app once you sign in.
 
-```bash
-pnpm tsx --env-file=.env.local scripts/dev-login.ts tom@onesignanddigital.com
+```sql
+do $$
+declare
+  v_user_id uuid;
+  v_email   text := 'bromyard@mapleleaf.com';
+  v_pass    text := 'MapleleafAdmin2026';
+  v_name    text := 'Mapleleaf HQ';
+begin
+  select id into v_user_id from auth.users where email = v_email;
+
+  if v_user_id is null then
+    v_user_id := gen_random_uuid();
+    insert into auth.users (
+      id, instance_id, aud, role,
+      email, encrypted_password, email_confirmed_at,
+      raw_app_meta_data, raw_user_meta_data,
+      created_at, updated_at,
+      confirmation_token, email_change, email_change_token_new, recovery_token
+    ) values (
+      v_user_id,
+      '00000000-0000-0000-0000-000000000000',
+      'authenticated', 'authenticated',
+      v_email,
+      crypt(v_pass, gen_salt('bf')),
+      now(),
+      jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')),
+      jsonb_build_object('full_name', v_name),
+      now(), now(),
+      '', '', '', ''
+    );
+
+    insert into auth.identities (
+      user_id, provider_id, provider, identity_data,
+      last_sign_in_at, created_at, updated_at
+    ) values (
+      v_user_id, v_user_id::text, 'email',
+      jsonb_build_object('sub', v_user_id::text, 'email', v_email, 'email_verified', true),
+      now(), now(), now()
+    )
+    on conflict (provider, provider_id) do nothing;
+  else
+    update auth.users
+       set encrypted_password = crypt(v_pass, gen_salt('bf'))
+     where id = v_user_id;
+  end if;
+
+  insert into public.user_profiles (id, email, full_name, role, is_active)
+  values (v_user_id, v_email, v_name, 'HQ_ADMIN', true)
+  on conflict (id) do update
+    set role = 'HQ_ADMIN', is_active = true;
+end $$;
 ```
 
-Copy the URL containing `/auth/dev?token_hash=…` (or paste the Option A
-magic-link URL if your project *is* whitelisted). That route verifies the
-one-time token and sets the session cookie, landing you on `/sites`. The
-route 404s in production.
+Then sign in at `/login` with those credentials. From there, onboard
+subordinates through the app — HQ creates Area Managers, Area Managers
+create Site Managers and Employees for their areas, and so on.
 
 ### Ten-step acceptance walk-through
 
-1. **Sign in as an Area Manager (or HQ Admin for the full view).** Promote
-   the profile via SQL once the first magic-link lands:
-   `update public.user_profiles set role = 'AREA_MANAGER' where email = …`,
-   and attach them to an area via `insert into area_manager_assignments …`.
+1. **Sign in as HQ Admin** with `bromyard@mapleleaf.com` / the bootstrap
+   password above. Onboard subordinates from inside the app — no SQL
+   required once you're in.
 2. **Onboard a site.** `/sites/new` → fill in code, name, area (only the
    AM's areas appear), tier, address. On submit, lands on the site detail
    page. `site_planograms` shell is created in the same flow.

@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,96 +12,54 @@ const schema = z.object({
     .string()
     .min(1, 'Enter your work email')
     .email('That doesn’t look like a valid email'),
+  password: z.string().min(1, 'Enter your password'),
 });
 
 type FormValues = z.infer<typeof schema>;
 
 type SubmitState =
   | { kind: 'idle' }
-  | { kind: 'sending' }
-  | { kind: 'sent'; email: string }
+  | { kind: 'signing-in' }
   | { kind: 'error'; message: string };
 
 export function LoginForm({ nextPath }: { nextPath: string }) {
+  const router = useRouter();
   const [state, setState] = useState<SubmitState>({ kind: 'idle' });
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-    getValues,
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     mode: 'onSubmit',
   });
 
   async function onSubmit(values: FormValues) {
-    setState({ kind: 'sending' });
+    setState({ kind: 'signing-in' });
 
     const supabase = createClient();
-    const redirectTo = new URL(
-      `/auth/callback?next=${encodeURIComponent(nextPath)}`,
-      window.location.origin
-    ).toString();
-
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithPassword({
       email: values.email,
-      options: {
-        emailRedirectTo: redirectTo,
-        shouldCreateUser: false,
-      },
+      password: values.password,
     });
 
     if (error) {
-      setState({ kind: 'error', message: error.message });
+      setState({
+        kind: 'error',
+        message:
+          error.message === 'Invalid login credentials'
+            ? 'Email or password doesn’t match our records.'
+            : error.message,
+      });
       return;
     }
 
-    setState({ kind: 'sent', email: values.email });
+    router.push(nextPath);
+    router.refresh();
   }
 
-  async function resend() {
-    const email = getValues('email');
-    if (!email) return;
-    await onSubmit({ email });
-  }
-
-  if (state.kind === 'sent') {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-          padding: 20,
-          background: 'var(--ml-surface-muted)',
-          borderRadius: 'var(--ml-radius-md)',
-          textAlign: 'center',
-        }}
-      >
-        <p style={{ margin: 0, fontSize: 14, color: 'var(--ml-text-primary)' }}>
-          Check your inbox — we’ve sent a sign-in link to{' '}
-          <strong>{state.email}</strong>.
-        </p>
-        <button
-          type="button"
-          onClick={resend}
-          style={{
-            background: 'transparent',
-            color: 'var(--ml-charcoal)',
-            border: '1px solid var(--ml-charcoal)',
-            borderRadius: 'var(--ml-radius-md)',
-            height: 40,
-            fontSize: 13,
-            fontWeight: 500,
-            cursor: 'pointer',
-          }}
-        >
-          Resend link
-        </button>
-      </div>
-    );
-  }
+  const busy = state.kind === 'signing-in';
 
   return (
     <form
@@ -125,7 +84,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
           autoComplete="email"
           autoFocus
           aria-invalid={errors.email ? true : undefined}
-          disabled={state.kind === 'sending'}
+          disabled={busy}
           {...register('email')}
           style={{
             height: 40,
@@ -141,11 +100,46 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
           }}
         />
         {errors.email && (
-          <span
-            role="alert"
-            style={{ fontSize: 12, color: 'var(--ml-red)' }}
-          >
+          <span role="alert" style={{ fontSize: 12, color: 'var(--ml-red)' }}>
             {errors.email.message}
+          </span>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <label
+          htmlFor="password"
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            color: 'var(--ml-text-primary)',
+          }}
+        >
+          Password
+        </label>
+        <input
+          id="password"
+          type="password"
+          autoComplete="current-password"
+          aria-invalid={errors.password ? true : undefined}
+          disabled={busy}
+          {...register('password')}
+          style={{
+            height: 40,
+            padding: '0 12px',
+            border: errors.password
+              ? '1px solid var(--ml-red)'
+              : '1px solid var(--ml-border-default)',
+            borderRadius: 'var(--ml-radius-md)',
+            fontFamily: 'inherit',
+            fontSize: 14,
+            background: 'var(--ml-surface-panel)',
+            color: 'var(--ml-text-primary)',
+          }}
+        />
+        {errors.password && (
+          <span role="alert" style={{ fontSize: 12, color: 'var(--ml-red)' }}>
+            {errors.password.message}
           </span>
         )}
       </div>
@@ -168,7 +162,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
 
       <button
         type="submit"
-        disabled={state.kind === 'sending'}
+        disabled={busy}
         style={{
           height: 44,
           background: 'var(--ml-action-primary)',
@@ -178,12 +172,12 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
           fontFamily: 'inherit',
           fontSize: 14,
           fontWeight: 500,
-          cursor: state.kind === 'sending' ? 'wait' : 'pointer',
-          opacity: state.kind === 'sending' ? 0.7 : 1,
+          cursor: busy ? 'wait' : 'pointer',
+          opacity: busy ? 0.7 : 1,
           transition: 'opacity var(--ml-motion-fast) var(--ml-ease-out)',
         }}
       >
-        {state.kind === 'sending' ? 'Sending link…' : 'Send magic link'}
+        {busy ? 'Signing in…' : 'Sign in'}
       </button>
     </form>
   );

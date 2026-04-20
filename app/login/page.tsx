@@ -51,12 +51,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <p
           style={{
             textAlign: 'center',
-            fontSize: '14px',
+            fontSize: '13px',
             color: 'var(--ml-text-muted)',
             margin: 0,
           }}
         >
-          Franchise operations, grounded in the Mapleleaf brand system.
+          Sign in with the credentials your admin issued.
         </p>
 
         {errorMessage && (
