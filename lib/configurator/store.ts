@@ -2,7 +2,13 @@
 
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import type { PlacedUnit, Rotation, UnitTypeSummary } from './types';
+import type {
+  PlacedUnit,
+  Rotation,
+  ShopBounds,
+  SiteUnitShelf,
+  UnitTypeSummary,
+} from './types';
 import { SNAP_MM } from './types';
 
 /**
@@ -34,15 +40,25 @@ interface ConfiguratorState {
   pending: PendingUnit[];
   selectedId: string | null; // id of a PlacedUnit, or tempId of a PendingUnit
 
+  shopBounds: ShopBounds | null;
+
   // view
   zoom: number;
 
   // actions
   setUnits: (units: PlacedUnit[]) => void;
+  setShopBounds: (bounds: ShopBounds | null) => void;
   addPending: (p: PendingUnit) => void;
   upgradePending: (tempId: string, saved: PlacedUnit) => void;
   removePending: (tempId: string) => void;
   updateUnit: (id: string, patch: Partial<PlacedUnit>) => void;
+  addShelf: (unitId: string, shelf: SiteUnitShelf) => void;
+  updateShelf: (
+    unitId: string,
+    shelfId: string,
+    patch: Partial<SiteUnitShelf>
+  ) => void;
+  removeShelf: (unitId: string, shelfId: string) => void;
   removeUnit: (id: string) => void;
   select: (id: string | null) => void;
   setZoom: (z: number) => void;
@@ -58,11 +74,17 @@ export const useConfigurator = create<ConfiguratorState>()(
     units: [],
     pending: [],
     selectedId: null,
+    shopBounds: null,
     zoom: 1,
 
     setUnits: (units) =>
       set((draft) => {
         draft.units = units;
+      }),
+
+    setShopBounds: (bounds) =>
+      set((draft) => {
+        draft.shopBounds = bounds;
       }),
 
     addPending: (p) =>
@@ -88,6 +110,29 @@ export const useConfigurator = create<ConfiguratorState>()(
       set((draft) => {
         const u = draft.units.find((x) => x.id === id);
         if (u) Object.assign(u, patch);
+      }),
+
+    addShelf: (unitId, shelf) =>
+      set((draft) => {
+        const u = draft.units.find((x) => x.id === unitId);
+        if (!u) return;
+        u.shelves.push(shelf);
+        u.shelves.sort((a, b) => a.shelf_order - b.shelf_order);
+      }),
+
+    updateShelf: (unitId, shelfId, patch) =>
+      set((draft) => {
+        const u = draft.units.find((x) => x.id === unitId);
+        if (!u) return;
+        const s = u.shelves.find((x) => x.id === shelfId);
+        if (s) Object.assign(s, patch);
+      }),
+
+    removeShelf: (unitId, shelfId) =>
+      set((draft) => {
+        const u = draft.units.find((x) => x.id === unitId);
+        if (!u) return;
+        u.shelves = u.shelves.filter((s) => s.id !== shelfId);
       }),
 
     removeUnit: (id) =>

@@ -8,6 +8,11 @@ import {
   placeSiteUnit,
   updateSiteUnit,
   deleteSiteUnit,
+  setShopBounds,
+  clearShopBounds,
+  addShelf as addShelfAction,
+  updateShelf as updateShelfAction,
+  deleteShelf as deleteShelfAction,
 } from '@/lib/configurator/actions';
 import { requestFittingQuote } from '@/lib/quote/actions';
 import { useConfigurator } from '@/lib/configurator/store';
@@ -15,10 +20,13 @@ import type {
   PlacedUnit,
   PromoSectionSummary,
   Rotation,
+  ShopBounds,
   UnitTypeSummary,
 } from '@/lib/configurator/types';
 import { UnitLibraryRail } from '@/components/configurator/UnitLibraryRail';
 import { UnitInspector } from '@/components/configurator/UnitInspector';
+import { StageToolbar } from '@/components/configurator/StageToolbar';
+import { ShopBoundsDialog } from '@/components/configurator/ShopBoundsDialog';
 
 const FloorPlanStage = dynamic(
   () => import('@/components/configurator/FloorPlanStage'),
@@ -31,6 +39,7 @@ interface Props {
   unitTypes: UnitTypeSummary[];
   promoSections: PromoSectionSummary[];
   initialUnits: PlacedUnit[];
+  initialShopBounds: ShopBounds | null;
   canEdit: boolean;
 }
 
@@ -42,21 +51,35 @@ export function PlanogramClient({
   unitTypes,
   promoSections,
   initialUnits,
+  initialShopBounds,
   canEdit,
 }: Props) {
   const setUnits = useConfigurator((s) => s.setUnits);
+  const setShopBoundsLocal = useConfigurator((s) => s.setShopBounds);
+  const shopBounds = useConfigurator((s) => s.shopBounds);
   const addPending = useConfigurator((s) => s.addPending);
   const upgradePending = useConfigurator((s) => s.upgradePending);
   const removePending = useConfigurator((s) => s.removePending);
   const updateUnit = useConfigurator((s) => s.updateUnit);
   const removeUnitLocal = useConfigurator((s) => s.removeUnit);
+  const addShelfLocal = useConfigurator((s) => s.addShelf);
+  const updateShelfLocal = useConfigurator((s) => s.updateShelf);
+  const removeShelfLocal = useConfigurator((s) => s.removeShelf);
+  const units = useConfigurator((s) => s.units);
 
   const [toast, setToast] = useState<Toast>(null);
+  const [boundsOpen, setBoundsOpen] = useState(false);
   const placingLock = useRef(0);
+  const router = useRouter();
+  const [requesting, setRequesting] = useState(false);
 
   useEffect(() => {
     setUnits(initialUnits);
   }, [initialUnits, setUnits]);
+
+  useEffect(() => {
+    setShopBoundsLocal(initialShopBounds);
+  }, [initialShopBounds, setShopBoundsLocal]);
 
   useEffect(() => {
     if (!toast) return;
@@ -88,7 +111,10 @@ export function PlanogramClient({
       if (!type) return;
 
       const tempId = `pending-${++placingLock.current}-${Date.now()}`;
-      const defaultLabel = autoLabel(type);
+      const store = useConfigurator.getState();
+      const sameType = store.units.filter((u) => u.unit_type_id === type.id).length + 1;
+      const base = type.display_name.split(' ').slice(0, 2).join(' ');
+      const defaultLabel = `${base} ${sameType}`;
 
       addPending({
         tempId,
@@ -152,11 +178,7 @@ export function PlanogramClient({
       promo_section_id?: string | null;
     }) => {
       const { id, ...rest } = args;
-      const res = await updateSiteUnit({
-        siteId,
-        unitId: id,
-        ...rest,
-      });
+      const res = await updateSiteUnit({ siteId, unitId: id, ...rest });
       if (!res.ok) setToast({ kind: 'error', message: res.message });
     },
     [siteId]
@@ -175,8 +197,75 @@ export function PlanogramClient({
     [siteId, removeUnitLocal]
   );
 
-  const router = useRouter();
-  const [requesting, setRequesting] = useState(false);
+  const onAddShelf = useCallback(
+    async (unitId: string) => {
+      const u = useConfigurator
+        .getState()
+        .units.find((x) => x.id === unitId);
+      if (!u) return;
+      const existing = u.shelves ?? [];
+      const maxOrder = existing.reduce(
+        (acc, s) => Math.max(acc, s.shelf_order),
+        0
+      );
+      const previous = existing[existing.length - 1];
+      const payload = {
+        siteId,
+        siteUnitId: unitId,
+        shelfOrder: maxOrder + 1,
+        clearanceMm: previous?.clearance_mm ?? 250,
+        depthMm: previous?.depth_mm ?? null,
+        isBaseShelf: false,
+      };
+      const res = await addShelfAction(payload);
+      if (!res.ok) {
+        setToast({ kind: 'error', message: res.message });
+        return;
+      }
+      router.refresh();
+    },
+    [siteId, router]
+  );
+
+  const onUpdateShelf = useCallback(
+    async (
+      unitId: string,
+      shelfId: string,
+      patch: {
+        clearanceMm?: number;
+        depthMm?: number | null;
+        promoSectionId?: string | null;
+      }
+    ) => {
+      // Optimistic local update so the field reflects the change instantly.
+      const storePatch: Parameters<typeof updateShelfLocal>[2] = {};
+      if (patch.clearanceMm !== undefined)
+        storePatch.clearance_mm = patch.clearanceMm;
+      if (patch.depthMm !== undefined) storePatch.depth_mm = patch.depthMm;
+      if (patch.promoSectionId !== undefined)
+        storePatch.promo_section_id = patch.promoSectionId;
+      updateShelfLocal(unitId, shelfId, storePatch);
+
+      const res = await updateShelfAction({
+        siteId,
+        shelfId,
+        ...patch,
+      });
+      if (!res.ok) setToast({ kind: 'error', message: res.message });
+    },
+    [siteId, updateShelfLocal]
+  );
+
+  const onDeleteShelf = useCallback(
+    async (unitId: string, shelfId: string) => {
+      removeShelfLocal(unitId, shelfId);
+      const res = await deleteShelfAction({ siteId, shelfId });
+      if (!res.ok) {
+        setToast({ kind: 'error', message: res.message });
+      }
+    },
+    [siteId, removeShelfLocal]
+  );
 
   const onRequestQuote = useCallback(async () => {
     if (!canEdit || requesting) return;
@@ -194,13 +283,35 @@ export function PlanogramClient({
     }
   }, [canEdit, requesting, siteId, router]);
 
+  async function handleSaveBounds(bounds: ShopBounds) {
+    const res = await setShopBounds({
+      siteId,
+      widthMm: bounds.widthMm,
+      heightMm: bounds.heightMm,
+    });
+    if (!res.ok) {
+      setToast({ kind: 'error', message: res.message });
+      throw new Error(res.message);
+    }
+    setShopBoundsLocal(bounds);
+  }
+
+  async function handleClearBounds() {
+    const res = await clearShopBounds({ siteId });
+    if (!res.ok) {
+      setToast({ kind: 'error', message: res.message });
+      throw new Error(res.message);
+    }
+    setShopBoundsLocal(null);
+  }
+
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
-        height: 'calc(100vh - 140px)',
+        gap: 14,
+        height: 'calc(100vh - 88px)',
         minHeight: 560,
       }}
     >
@@ -237,7 +348,12 @@ export function PlanogramClient({
             Planogram · {siteName}
           </h1>
           <p style={{ margin: 0, fontSize: 13, color: 'var(--ml-text-muted)' }}>
-            Drag units from the left onto the floor plan. Snap grid: 100mm.
+            Drag units from the left. Snap grid: 100mm.{' '}
+            {shopBounds
+              ? `Shop floor ${(shopBounds.widthMm / 1000).toFixed(1)} × ${(
+                  shopBounds.heightMm / 1000
+                ).toFixed(1)}m.`
+              : 'No shop bounds set.'}
             {canEdit ? '' : ' Read-only for your role.'}
           </p>
         </div>
@@ -287,6 +403,12 @@ export function PlanogramClient({
         </div>
       </header>
 
+      <StageToolbar
+        canEdit={canEdit}
+        shopBounds={shopBounds}
+        onEditBounds={() => setBoundsOpen(true)}
+      />
+
       <div
         style={{
           display: 'flex',
@@ -297,17 +419,29 @@ export function PlanogramClient({
       >
         {canEdit && <UnitLibraryRail units={unitTypes} />}
         <FloorPlanStage
-          sitePlanogramId={siteId}
           promoSections={promoSections}
           onDropUnit={onDrop}
           onMove={onMove}
+          shopBounds={shopBounds}
         />
         <UnitInspector
           promoSections={promoSections}
+          canEdit={canEdit}
           onUpdate={onInspectorUpdate}
           onDelete={onInspectorDelete}
+          onAddShelf={onAddShelf}
+          onUpdateShelf={onUpdateShelf}
+          onDeleteShelf={onDeleteShelf}
         />
       </div>
+
+      <ShopBoundsDialog
+        open={boundsOpen}
+        initialBounds={shopBounds}
+        onClose={() => setBoundsOpen(false)}
+        onSave={handleSaveBounds}
+        onClear={handleClearBounds}
+      />
 
       {toast && (
         <div
@@ -328,6 +462,7 @@ export function PlanogramClient({
             letterSpacing: '0.01em',
             boxShadow: '0 10px 30px rgba(65, 64, 66, 0.25)',
             maxWidth: 360,
+            zIndex: 60,
           }}
         >
           {toast.message}
@@ -335,15 +470,4 @@ export function PlanogramClient({
       )}
     </div>
   );
-}
-
-/**
- * Generate a sensible auto-label based on the unit type and existing count.
- * Users rename immediately via the inspector.
- */
-function autoLabel(t: UnitTypeSummary): string {
-  const store = useConfigurator.getState();
-  const sameType = store.units.filter((u) => u.unit_type_id === t.id).length + 1;
-  const base = t.display_name.split(' ').slice(0, 2).join(' ');
-  return `${base} ${sameType}`;
 }

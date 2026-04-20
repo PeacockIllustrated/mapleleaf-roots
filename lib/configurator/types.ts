@@ -56,6 +56,37 @@ export interface PlacedUnit {
   floor_x: number;
   floor_y: number;
   rotation_degrees: Rotation;
+  shelves: SiteUnitShelf[];
+  pos_slots: UnitTypePosSlotRef[];
+}
+
+export interface SiteUnitShelf {
+  id: string;
+  site_unit_id: string;
+  shelf_order: number;
+  clearance_mm: number;
+  depth_mm: number | null;
+  is_base_shelf: boolean;
+  promo_section_id: string | null;
+}
+
+export interface UnitTypePosSlotRef {
+  id: string;
+  position_label: string | null;
+  quantity: number;
+  pos_slot_type: {
+    code: string;
+    display_name: string;
+    width_mm: number;
+    height_mm: number;
+    mount_method: string;
+    default_material: string;
+  };
+}
+
+export interface ShopBounds {
+  widthMm: number;
+  heightMm: number;
 }
 
 /**
