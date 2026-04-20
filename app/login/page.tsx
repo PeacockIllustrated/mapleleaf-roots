@@ -1,26 +1,17 @@
 import { MapleleafIcon } from '@/components/brand/MapleleafIcon';
 import { Wordmark } from '@/components/brand/Wordmark';
+import { LoginForm } from './login-form';
 
-/**
- * Login page — stub.
- *
- * Phase 1 Claude Code task: implement magic-link authentication.
- *
- * Minimum behaviour:
- *   1. Email input + "Send magic link" button
- *   2. On submit, call Supabase Auth signInWithOtp({ email, options: { emailRedirectTo: ... } })
- *   3. Show a success message with "Check your inbox" + resend option
- *   4. Magic link lands on /auth/callback which exchanges the code for a session
- *   5. Successful auth redirects to /sites
- *
- * Brand notes (from docs/BRAND.md):
- *   - The marque is the hero of this page — large, centred
- *   - Single-column form, max-width ~400px
- *   - Primary CTA in Mapleleaf red
- *   - No hero photography, no illustrations
- */
+interface LoginPageProps {
+  searchParams: Promise<{ from?: string; error?: string }>;
+}
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+  const nextPath =
+    params.from && params.from.startsWith('/') ? params.from : '/sites';
+  const errorMessage = params.error ? decodeURIComponent(params.error) : null;
+
   return (
     <main
       style={{
@@ -68,24 +59,23 @@ export default function LoginPage() {
           Franchise operations, grounded in the Mapleleaf brand system.
         </p>
 
-        {/*
-          TODO (Phase 1): replace with a client component that:
-          - Captures email via react-hook-form + Zod
-          - Calls supabase.auth.signInWithOtp(...)
-          - Handles success, rate-limit, and error states
-        */}
-        <div
-          style={{
-            padding: '24px',
-            background: 'var(--ml-surface-muted)',
-            borderRadius: 'var(--ml-radius-md)',
-            fontSize: '13px',
-            color: 'var(--ml-text-primary)',
-            textAlign: 'center',
-          }}
-        >
-          Login form — implement in Phase 1.
-        </div>
+        {errorMessage && (
+          <div
+            role="alert"
+            style={{
+              padding: 12,
+              background: 'rgba(225, 40, 40, 0.06)',
+              border: '1px solid rgba(225, 40, 40, 0.35)',
+              borderRadius: 'var(--ml-radius-md)',
+              fontSize: 13,
+              color: 'var(--ml-red)',
+            }}
+          >
+            Sign-in failed: {errorMessage}
+          </div>
+        )}
+
+        <LoginForm nextPath={nextPath} />
       </div>
     </main>
   );

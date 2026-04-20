@@ -19,6 +19,7 @@ interface AppBarProps {
   userName?: string;
   userRole?: 'HQ_ADMIN' | 'AREA_MANAGER' | 'SITE_MANAGER' | 'EMPLOYEE';
   children?: React.ReactNode; // Slot for nav links, actions
+  userActions?: React.ReactNode; // Trailing slot for sign-out, menu triggers etc.
 }
 
 const roleLabels = {
@@ -28,7 +29,7 @@ const roleLabels = {
   EMPLOYEE: 'Employee',
 };
 
-export function AppBar({ userName, userRole, children }: AppBarProps) {
+export function AppBar({ userName, userRole, children, userActions }: AppBarProps) {
   return (
     <header
       style={{
@@ -113,6 +114,12 @@ export function AppBar({ userName, userRole, children }: AppBarProps) {
               {roleLabels[userRole]}
             </span>
           )}
+        </div>
+      )}
+
+      {userActions && (
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          {userActions}
         </div>
       )}
     </header>
