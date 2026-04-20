@@ -9,7 +9,7 @@ interface LoginPageProps {
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const nextPath =
-    params.from && params.from.startsWith('/') ? params.from : '/sites';
+    params.from && params.from.startsWith('/') ? params.from : '/dashboard';
   const errorMessage = params.error ? decodeURIComponent(params.error) : null;
 
   return (

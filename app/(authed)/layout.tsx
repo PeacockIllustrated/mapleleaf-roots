@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
-import { AppBar } from '@/components/brand/AppBar';
-import { PrimaryNav } from '@/components/brand/PrimaryNav';
+import { Sidenav } from '@/components/brand/Sidenav';
 import { UserMenu } from '@/components/brand/UserMenu';
 import { currentProfile } from '@/lib/auth/require-role';
 import { signOut } from './actions';
@@ -8,11 +7,11 @@ import { signOut } from './actions';
 /**
  * Auth-gated shell.
  *
- * Middleware already redirects unauthenticated users to /login, so by the
- * time this layout runs we expect a session. We still call `currentProfile`
- * to fetch the user_profiles row — if it's missing (rare — trigger didn't
- * fire, callback upsert failed), we bail back to /login rather than render
- * a page that RLS will refuse to populate.
+ * A persistent dashboard chrome: charcoal sidenav on the left, thin content
+ * frame on the right. Middleware already redirects unauthenticated users to
+ * /login; currentProfile here is the belt-and-braces check for the rare
+ * case where a session exists but no user_profiles row does (trigger didn't
+ * fire + callback upsert didn't fire).
  */
 export default async function AuthedLayout({
   children,
@@ -26,17 +25,27 @@ export default async function AuthedLayout({
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <AppBar
-        userName={profile.full_name}
-        userRole={profile.role}
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        background: 'var(--ml-off-white)',
+      }}
+    >
+      <Sidenav
+        profile={profile}
         userActions={<UserMenu signOutAction={signOut} />}
+      />
+      <main
+        style={{
+          flex: 1,
+          minWidth: 0,
+          padding: '28px 32px 48px',
+          overflowX: 'hidden',
+        }}
       >
-        <PrimaryNav role={profile.role} />
-      </AppBar>
-      <div style={{ flex: 1, padding: '24px 32px', maxWidth: 1440, width: '100%', margin: '0 auto' }}>
-        {children}
-      </div>
+        <div style={{ maxWidth: 1440, margin: '0 auto' }}>{children}</div>
+      </main>
     </div>
   );
 }

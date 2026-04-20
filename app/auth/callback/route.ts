@@ -28,9 +28,9 @@ import { createServerClient } from '@/lib/supabase/server';
  */
 
 function safeNext(raw: string | null): string {
-  if (!raw) return '/sites';
-  if (!raw.startsWith('/')) return '/sites';
-  if (raw.startsWith('//')) return '/sites';
+  if (!raw) return '/dashboard';
+  if (!raw.startsWith('/')) return '/dashboard';
+  if (raw.startsWith('//')) return '/dashboard';
   return raw;
 }
 
