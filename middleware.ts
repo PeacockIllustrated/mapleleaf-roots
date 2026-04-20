@@ -16,7 +16,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  * middleware file elsewhere — Next.js only picks up one.
  */
 
-const PUBLIC_PATHS = ['/login', '/auth/callback'];
+const PUBLIC_PATHS = ['/login', '/auth/callback', '/auth/dev'];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
