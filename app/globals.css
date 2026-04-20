@@ -1,0 +1,117 @@
+/* ==========================================================================
+   Mapleleaf Roots — Global styles
+   ==========================================================================
+   Brand tokens live here as CSS custom properties. Component code references
+   these via var(--ml-*) or via Tailwind utilities (see tailwind.config.ts).
+   ========================================================================== */
+
+@import '@fontsource/poppins/300-italic.css';
+@import '@fontsource/poppins/400.css';
+@import '@fontsource/poppins/500.css';
+@import '@fontsource/poppins/700.css';
+@import '@fontsource/poppins/900.css';
+
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* --------------------------------------------------------------------------
+   Brand tokens — the source of truth
+   -------------------------------------------------------------------------- */
+
+:root {
+  /* Primary palette — from docs/BRAND.md. Never override these. */
+  --ml-red: #E12828;
+  --ml-charcoal: #414042;
+  --ml-light-grey: #E6E7E7;
+
+  /* Gold gradient (reserved for premium accents) */
+  --ml-gold-light: #F8D3A3;
+  --ml-gold-mid: #ECBB7F;
+  --ml-gold-dark: #A96533;
+
+  /* Neutrals */
+  --ml-white: #FFFFFF;
+  --ml-off-white: #F5F2EE;
+  --ml-text-muted: #757578;
+
+  /* Semantic roles — components should prefer these over primitive tokens */
+  --ml-action-primary: var(--ml-red);
+  --ml-action-secondary: var(--ml-charcoal);
+  --ml-surface-panel: var(--ml-white);
+  --ml-surface-muted: var(--ml-light-grey);
+  --ml-text-primary: var(--ml-charcoal);
+  --ml-text-on-dark: var(--ml-white);
+  --ml-border-default: rgba(65, 64, 66, 0.12);
+  --ml-border-strong: var(--ml-charcoal);
+  --ml-focus-ring: var(--ml-red);
+
+  /* Radii */
+  --ml-radius-sm: 4px;
+  --ml-radius-md: 6px;
+  --ml-radius-lg: 8px;
+  --ml-radius-xl: 12px;
+
+  /* Motion */
+  --ml-motion-fast: 150ms;
+  --ml-motion-base: 200ms;
+  --ml-motion-slow: 250ms;
+  --ml-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ml-ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+}
+
+/* --------------------------------------------------------------------------
+   Base element styles
+   -------------------------------------------------------------------------- */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ml-text-primary);
+  background: var(--ml-off-white);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------------------
+   Focus handling — red ring matches brand
+   -------------------------------------------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--ml-focus-ring);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Utility helpers
+   -------------------------------------------------------------------------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm --version)",
+      "Bash(npx --version)",
+      "Bash(supabase --version)",
+      "Bash(docker --version)",
+      "Bash(COREPACK_ENABLE_STRICT=0 pnpm --version)",
+      "Bash(npm --version)",
+      "Bash(docker info *)",
+      "Bash(corepack --version)",
+      "Bash(corepack prepare *)"
+    ]
+  }
+}
