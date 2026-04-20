@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { currentProfile } from '@/lib/auth/require-role';
 import { createServerClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
@@ -84,6 +85,29 @@ export default async function SitesPage() {
             is scoped to your role.
           </p>
         </div>
+
+        {(profile.role === 'HQ_ADMIN' || profile.role === 'AREA_MANAGER') && (
+          <Link
+            href="/sites/new"
+            style={{
+              height: 40,
+              padding: '0 18px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'var(--ml-action-primary)',
+              color: '#FFFFFF',
+              border: 0,
+              borderRadius: 'var(--ml-radius-md)',
+              fontSize: 13,
+              fontWeight: 500,
+              textDecoration: 'none',
+              letterSpacing: '0.01em',
+            }}
+          >
+            New site
+          </Link>
+        )}
       </header>
 
       {error && (
@@ -132,53 +156,60 @@ export default async function SitesPage() {
           }}
         >
           {sites.map((site) => (
-            <li
-              key={site.id}
-              style={{
-                padding: '16px 20px',
-                background: 'var(--ml-surface-panel)',
-                border: '0.5px solid var(--ml-border-default)',
-                borderRadius: 'var(--ml-radius-lg)',
-                display: 'grid',
-                gridTemplateColumns: '1fr auto',
-                alignItems: 'center',
-                gap: 12,
-              }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <li key={site.id}>
+              <Link
+                href={`/sites/${site.id}`}
+                style={{
+                  padding: '16px 20px',
+                  background: 'var(--ml-surface-panel)',
+                  border: '0.5px solid var(--ml-border-default)',
+                  borderRadius: 'var(--ml-radius-lg)',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  alignItems: 'center',
+                  gap: 12,
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  transition:
+                    'border-color var(--ml-motion-fast) var(--ml-ease-out), transform var(--ml-motion-fast) var(--ml-ease-out)',
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 500,
+                      color: 'var(--ml-text-primary)',
+                    }}
+                  >
+                    {site.name}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--ml-text-muted)',
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {site.code}
+                    {site.postcode ? ` · ${site.postcode}` : ''} ·{' '}
+                    {site.tier.toLowerCase()}
+                  </span>
+                </div>
                 <span
                   style={{
-                    fontSize: 15,
+                    fontSize: 11,
                     fontWeight: 500,
-                    color: 'var(--ml-text-primary)',
-                  }}
-                >
-                  {site.name}
-                </span>
-                <span
-                  style={{
-                    fontSize: 12,
-                    color: 'var(--ml-text-muted)',
+                    color: 'var(--ml-charcoal)',
+                    background: 'var(--ml-surface-muted)',
+                    padding: '4px 10px',
+                    borderRadius: 9999,
                     letterSpacing: '0.02em',
                   }}
                 >
-                  {site.code}
-                  {site.postcode ? ` · ${site.postcode}` : ''} · {site.tier.toLowerCase()}
+                  {statusLabels[site.onboarding_status]}
                 </span>
-              </div>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 500,
-                  color: 'var(--ml-charcoal)',
-                  background: 'var(--ml-surface-muted)',
-                  padding: '4px 10px',
-                  borderRadius: 'var(--ml-radius-pill, 9999px)',
-                  letterSpacing: '0.02em',
-                }}
-              >
-                {statusLabels[site.onboarding_status]}
-              </span>
+              </Link>
             </li>
           ))}
         </ul>

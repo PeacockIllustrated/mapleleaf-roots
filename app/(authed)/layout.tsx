@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { AppBar } from '@/components/brand/AppBar';
+import { PrimaryNav } from '@/components/brand/PrimaryNav';
 import { UserMenu } from '@/components/brand/UserMenu';
 import { currentProfile } from '@/lib/auth/require-role';
 import { signOut } from './actions';
@@ -30,7 +31,9 @@ export default async function AuthedLayout({
         userName={profile.full_name}
         userRole={profile.role}
         userActions={<UserMenu signOutAction={signOut} />}
-      />
+      >
+        <PrimaryNav role={profile.role} />
+      </AppBar>
       <div style={{ flex: 1, padding: '24px 32px', maxWidth: 1440, width: '100%', margin: '0 auto' }}>
         {children}
       </div>
