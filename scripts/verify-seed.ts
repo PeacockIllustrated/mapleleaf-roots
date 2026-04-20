@@ -14,9 +14,9 @@ const EXPECTED = {
   promo_sections: 17,
   pos_slot_types: 29,
   unit_types: 33,
-  unit_type_default_shelves: 38,
+  unit_type_default_shelves: 45,
   // unit_type_pos_slots: not counted — varies and is boring to maintain
-  product_categories: 54,
+  product_categories: 58,
 } as const;
 
 async function main() {

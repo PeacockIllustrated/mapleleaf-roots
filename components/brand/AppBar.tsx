@@ -14,6 +14,7 @@
  */
 
 import { MapleleafIcon } from './MapleleafIcon';
+import { Wordmark } from './Wordmark';
 
 interface AppBarProps {
   userName?: string;
@@ -44,46 +45,18 @@ export function AppBar({ userName, userRole, children, userActions }: AppBarProp
       }}
     >
       {/* Brand lockup */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
         <MapleleafIcon size={36} variant="gold-on-red-square" />
-        <div
+        <span
+          aria-hidden="true"
           style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            gap: '10px',
-            lineHeight: 1,
+            width: 1,
+            height: 24,
+            background: 'rgba(255, 255, 255, 0.18)',
+            marginInline: '2px',
           }}
-        >
-          <span
-            style={{
-              fontWeight: 900,
-              fontSize: '17px',
-              color: '#FFFFFF',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            Mapleleaf
-          </span>
-          <span
-            style={{
-              width: 1,
-              height: 16,
-              background: 'rgba(255, 255, 255, 0.25)',
-            }}
-            aria-hidden="true"
-          />
-          <span
-            style={{
-              fontWeight: 500,
-              fontSize: '11px',
-              color: 'var(--ml-light-grey)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.16em',
-            }}
-          >
-            Roots
-          </span>
-        </div>
+        />
+        <Wordmark division="roots" surface="dark" size="sm" />
       </div>
 
       {/* Slot for navigation and actions */}

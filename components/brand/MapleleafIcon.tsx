@@ -1,16 +1,15 @@
 /**
  * MapleleafIcon
  *
- * The Mapleleaf marque: a stylised gold maple leaf with a red accent stroke.
+ * Renders the authentic Mapleleaf marque — the gold-gradient maple leaf with
+ * red accents — from /public/brand/mapleleaf-icon.svg. Three presentations:
  *
- * NOTE: The current SVG path is a stylised APPROXIMATION of the Mapleleaf
- * brand mark. When the authentic vector is supplied by the brand team, drop
- * the SVG into `public/brand/mapleleaf.svg` and replace the inline path with
- * an <img> or <object> reference — or inline the real path here.
+ *   - gold-on-transparent : the icon on a neutral surface (login hero, cards)
+ *   - gold-on-red-square  : inside a red tile for the app-bar lockup
+ *   - mono-white          : solid-white silhouette for rare monochrome cases
  *
- * Brand rule: this icon is always the gold leaf + red stroke combination.
- * Do not recolour it, do not use it without the red accent, do not render
- * it smaller than 16px (the accent stops reading clearly below that).
+ * Brand rule: the icon always retains its gold + red character except in the
+ * explicit mono variant. Do not recolour it, do not crop it.
  */
 
 type Variant = 'gold-on-transparent' | 'gold-on-red-square' | 'mono-white';
@@ -19,17 +18,22 @@ interface MapleleafIconProps {
   size?: number;
   variant?: Variant;
   className?: string;
+  /** When rendered on a red square, how large the leaf sits inside. 0-1. */
+  leafScale?: number;
 }
+
+const ASSET = '/brand/mapleleaf-icon.svg';
 
 export function MapleleafIcon({
   size = 40,
   variant = 'gold-on-transparent',
   className,
+  leafScale = 0.72,
 }: MapleleafIconProps) {
   if (variant === 'gold-on-red-square') {
-    // Used inside the app bar — a red tile with the leaf inside.
+    const inner = Math.round(size * leafScale);
     return (
-      <div
+      <span
         className={className}
         style={{
           width: size,
@@ -39,63 +43,46 @@ export function MapleleafIcon({
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
+          flexShrink: 0,
         }}
         aria-label="Mapleleaf"
       >
-        <svg
-          width={size * 0.7}
-          height={size * 0.7}
-          viewBox="0 0 80 80"
+        <img
+          src={ASSET}
+          width={inner}
+          height={inner}
+          alt=""
           aria-hidden="true"
-        >
-          <path
-            d="M40 5 L43 22 L55 17 L51 30 L65 28 L57 37 L73 42 L58 47 L68 60 L52 56 L48 68 L40 75 L32 68 L28 56 L12 60 L22 47 L7 42 L23 37 L15 28 L29 30 L25 17 L37 22 Z"
-            fill="var(--ml-gold-mid)"
-          />
-        </svg>
-      </div>
+          style={{ display: 'block' }}
+        />
+      </span>
     );
   }
 
   if (variant === 'mono-white') {
     return (
-      <svg
+      <img
+        src={ASSET}
         className={className}
         width={size}
         height={size}
-        viewBox="0 0 80 80"
-        aria-label="Mapleleaf"
-      >
-        <path
-          d="M40 5 L43 22 L55 17 L51 30 L65 28 L57 37 L73 42 L58 47 L68 60 L52 56 L48 68 L40 75 L32 68 L28 56 L12 60 L22 47 L7 42 L23 37 L15 28 L29 30 L25 17 L37 22 Z"
-          fill="#FFFFFF"
-        />
-      </svg>
+        alt="Mapleleaf"
+        style={{
+          display: 'block',
+          filter: 'brightness(0) invert(1)',
+        }}
+      />
     );
   }
 
-  // Default: gold leaf with red accent on transparent background
   return (
-    <svg
+    <img
+      src={ASSET}
       className={className}
       width={size}
       height={size}
-      viewBox="0 0 80 80"
-      aria-label="Mapleleaf"
-    >
-      <path
-        d="M40 5 L43 22 L55 17 L51 30 L65 28 L57 37 L73 42 L58 47 L68 60 L52 56 L48 68 L40 75 L32 68 L28 56 L12 60 L22 47 L7 42 L23 37 L15 28 L29 30 L25 17 L37 22 Z"
-        fill="var(--ml-gold-mid)"
-        stroke="var(--ml-gold-dark)"
-        strokeWidth={0.8}
-      />
-      <path
-        d="M14 42 Q 40 54 66 42"
-        stroke="var(--ml-red)"
-        strokeWidth={3.5}
-        fill="none"
-        strokeLinecap="round"
-      />
-    </svg>
+      alt="Mapleleaf"
+      style={{ display: 'block' }}
+    />
   );
 }

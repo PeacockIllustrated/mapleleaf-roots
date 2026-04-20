@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 564.4 498.46">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: url(#linear-gradient-2);
+      }
+
+      .cls-2 {
+        fill: #e12828;
+      }
+
+      .cls-3 {
+        fill: url(#linear-gradient);
+      }
+    </style>
+    <linearGradient id="linear-gradient" x1="57.93" y1="14894.23" x2="356.84" y2="15182.88" gradientTransform="translate(-.22 15259.95) scale(1 -1)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c38b52"/>
+      <stop offset=".21" stop-color="#c38b52"/>
+      <stop offset=".31" stop-color="#f9d3a4"/>
+      <stop offset=".45" stop-color="#e3b772"/>
+      <stop offset=".59" stop-color="#edbd82"/>
+      <stop offset="1" stop-color="#9d5729"/>
+      <stop offset="1" stop-color="#9d5729"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient-2" x1="104.67" y1="14759.35" x2="272.89" y2="14921.81" xlink:href="#linear-gradient"/>
+  </defs>
+  <g id="Layer_1-2" data-name="Layer 1">
+    <g id="uuid-19d6a557-782b-48cd-a76c-f774a84b6d3d" data-name="Layer 1-2">
+      <path class="cls-3" d="M207.45,129.68l-75.69-18.92,57.69,178.03-104.91-58.05,3.01,54.23L0,290.38l58.75,76.41c38.96,5,78.6,4.64,117.38-1.71,18.17-2.96,36.14-7.39,53.7-13.04,8.39-2.7,17.01-5.77,25.25-8.91,9.01-3.43,18.06-7.07,27.12-10.75V0l-74.74,129.68h0Z"/>
+      <path class="cls-2" d="M374.95,288.79l57.69-178.03-75.69,18.92L282.2,0v332.38c12.04-4.89,24.09-9.81,36.09-14.31,29.93-11.37,60.88-20.25,92.4-25.92,21.82-3.95,43.97-6.5,66.19-7.69l2.98-53.71-104.91,58.05h0Z"/>
+      <path class="cls-1" d="M230.08,498.46h52.12v-150.45c-13,5.98-26.09,11.87-39.28,17.07-19.74,7.82-40.11,14.2-60.89,18.74-3.12.7-7.12,1.47-10.25,2.11-2.69.49-6.48,1.16-9.15,1.64-1.73.28-4.02.64-5.74.92-19.15,2.94-38.54,4.55-57.92,4.87-18.12.29-36.26-.56-54.29-2.47l-24.97,21.97,154.96,31.08-34.88,54.5h90.27Z"/>
+      <path class="cls-2" d="M500.27,373.8l64.13-83.42-56.07-3.46c-33.82,1.47-67.49,5.99-100.44,13.94-27.68,6.63-54.68,15.73-80.85,26.91-6.72,2.84-13.94,6.05-20.6,9.08-8.05,3.66-16.14,7.43-24.25,11.17v150.45h142.39l-34.88-54.5,154.96-31.08-44.4-39.08h0Z"/>
+    </g>
+  </g>
+</svg>

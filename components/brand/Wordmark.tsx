@@ -1,24 +1,27 @@
 /**
  * Wordmark
  *
- * Renders a Mapleleaf product-family wordmark (Mapleleaf + division name).
+ * Renders the Mapleleaf product-family lockup by pairing the authentic
+ * "Mapleleaf" SVG wordmark with the division's SVG wordmark.
  *
  * BRAND RULE (non-negotiable):
- * Mapleleaf Red (#E12828) is NEVER used on division wordmarks.
- * The division name is always charcoal (on light surfaces) or white
- * (on dark surfaces). Only "Mapleleaf" is red.
+ *   - "Mapleleaf" is red on light surfaces, white on dark surfaces.
+ *   - The division name is charcoal on light surfaces, light grey on dark.
+ *   - Red NEVER appears on a division wordmark.
  *
- * If you find yourself tempted to set the division name to red to "match
- * the CTA colour" or similar — stop. Read docs/BRAND.md. The rule is deliberate.
+ * Assets live in /public/brand/. Dark surfaces recolour the red "Mapleleaf"
+ * to white via a CSS filter (brightness(0) invert(1)) — a single-colour SVG
+ * recolours cleanly under that filter.
  */
 
 type Division = 'petroleum' | 'express' | 'automotive' | 'roots';
 type Surface = 'light' | 'dark';
+type Size = 'sm' | 'md' | 'lg';
 
 interface WordmarkProps {
   division?: Division;
   surface?: Surface;
-  size?: 'sm' | 'md' | 'lg';
+  size?: Size;
   className?: string;
 }
 
@@ -29,10 +32,17 @@ const divisionLabels: Record<Division, string> = {
   roots: 'Roots',
 };
 
-const sizeScale = {
-  sm: { main: 18, sub: 11 },
-  md: { main: 28, sub: 16 },
-  lg: { main: 40, sub: 22 },
+// Aspect ratios taken from the supplied SVG viewBoxes.
+// Mapleleaf wordmark: 335.12 × 69.82 → 4.80
+// Division wordmarks: 155.98 × 33.26 → 4.69
+const MAPLELEAF_RATIO = 335.12 / 69.82;
+const DIVISION_RATIO = 155.98 / 33.26;
+
+// Height in px for the "Mapleleaf" wordmark at each size.
+const heightScale: Record<Size, { main: number; sub: number }> = {
+  sm: { main: 16, sub: 10 },
+  md: { main: 26, sub: 16 },
+  lg: { main: 36, sub: 22 },
 };
 
 export function Wordmark({
@@ -41,47 +51,45 @@ export function Wordmark({
   size = 'md',
   className,
 }: WordmarkProps) {
-  const scale = sizeScale[size];
+  const { main, sub } = heightScale[size];
 
-  // Rule: "Mapleleaf" is red on light surfaces, white on dark surfaces.
-  const mainColour = surface === 'dark' ? '#FFFFFF' : 'var(--ml-red)';
-
-  // Rule: division name is charcoal on light, white on dark. NEVER red.
-  const divColour = surface === 'dark' ? '#FFFFFF' : 'var(--ml-charcoal)';
+  const mainSrc = '/brand/mapleleaf-wordmark.svg';
+  const divSrc =
+    surface === 'dark'
+      ? `/brand/mapleleaf-${division}-light.svg`
+      : `/brand/mapleleaf-${division}-dark.svg`;
 
   return (
-    <div
+    <span
       className={className}
       style={{
         display: 'inline-flex',
         alignItems: 'baseline',
-        gap: '0.35em',
-        fontFamily: 'Poppins, system-ui, sans-serif',
+        gap: `${Math.round(main * 0.28)}px`,
         lineHeight: 1,
       }}
       aria-label={`Mapleleaf ${divisionLabels[division]}`}
     >
-      <span
+      <img
+        src={mainSrc}
+        alt=""
+        aria-hidden="true"
+        width={Math.round(main * MAPLELEAF_RATIO)}
+        height={main}
         style={{
-          fontWeight: 900,
-          fontSize: scale.main,
-          color: mainColour,
-          letterSpacing: '-0.02em',
+          display: 'block',
+          // On dark surfaces, recolour the red wordmark to white.
+          filter: surface === 'dark' ? 'brightness(0) invert(1)' : undefined,
         }}
-      >
-        Mapleleaf
-      </span>
-      <span
-        style={{
-          fontWeight: 900,
-          fontSize: scale.sub,
-          color: divColour,
-          textTransform: 'uppercase',
-          letterSpacing: '0.12em',
-        }}
-      >
-        {divisionLabels[division]}
-      </span>
-    </div>
+      />
+      <img
+        src={divSrc}
+        alt=""
+        aria-hidden="true"
+        width={Math.round(sub * DIVISION_RATIO)}
+        height={sub}
+        style={{ display: 'block' }}
+      />
+    </span>
   );
 }

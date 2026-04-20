@@ -13,7 +13,7 @@
     "db:reset": "supabase db reset",
     "db:push": "supabase db push",
     "db:types": "supabase gen types typescript --local > lib/supabase/database.types.ts",
-    "seed:verify": "tsx scripts/verify-seed.ts",
+    "seed:verify": "tsx --env-file=.env.local scripts/verify-seed.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
