@@ -2,11 +2,14 @@
 
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   placeSiteUnit,
   updateSiteUnit,
   deleteSiteUnit,
 } from '@/lib/configurator/actions';
+import { requestFittingQuote } from '@/lib/quote/actions';
 import { useConfigurator } from '@/lib/configurator/store';
 import type {
   PlacedUnit,
@@ -172,6 +175,25 @@ export function PlanogramClient({
     [siteId, removeUnitLocal]
   );
 
+  const router = useRouter();
+  const [requesting, setRequesting] = useState(false);
+
+  const onRequestQuote = useCallback(async () => {
+    if (!canEdit || requesting) return;
+    setRequesting(true);
+    const res = await requestFittingQuote({ siteId });
+    setRequesting(false);
+    if (res.ok) {
+      setToast({
+        kind: 'success',
+        message: `Draft quote ${res.quoteRef} created.`,
+      });
+      router.push(`/sites/${siteId}/quotes/${res.quoteRef}`);
+    } else {
+      setToast({ kind: 'error', message: res.message });
+    }
+  }, [canEdit, requesting, siteId, router]);
+
   return (
     <div
       style={{
@@ -182,22 +204,87 @@ export function PlanogramClient({
         minHeight: 560,
       }}
     >
-      <header style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 22,
-            fontWeight: 700,
-            letterSpacing: '-0.01em',
-            color: 'var(--ml-text-primary)',
-          }}
-        >
-          Planogram · {siteName}
-        </h1>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--ml-text-muted)' }}>
-          Drag units from the left onto the floor plan. Snap grid: 100mm.
-          {canEdit ? '' : ' Read-only for your role.'}
-        </p>
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: 16,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <Link
+            href={`/sites/${siteId}`}
+            style={{
+              fontSize: 12,
+              color: 'var(--ml-text-muted)',
+              textDecoration: 'none',
+              letterSpacing: '0.02em',
+            }}
+          >
+            ← Back to site
+          </Link>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
+              color: 'var(--ml-text-primary)',
+            }}
+          >
+            Planogram · {siteName}
+          </h1>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--ml-text-muted)' }}>
+            Drag units from the left onto the floor plan. Snap grid: 100mm.
+            {canEdit ? '' : ' Read-only for your role.'}
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <Link
+            href={`/sites/${siteId}/quotes`}
+            style={{
+              height: 36,
+              padding: '0 14px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              background: 'transparent',
+              color: 'var(--ml-charcoal)',
+              border: '1px solid var(--ml-charcoal)',
+              borderRadius: 'var(--ml-radius-md)',
+              fontSize: 12,
+              fontWeight: 500,
+              textDecoration: 'none',
+            }}
+          >
+            Quotes
+          </Link>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={onRequestQuote}
+              disabled={requesting}
+              style={{
+                height: 36,
+                padding: '0 18px',
+                background: 'var(--ml-action-primary)',
+                color: '#FFFFFF',
+                border: 0,
+                borderRadius: 'var(--ml-radius-md)',
+                fontFamily: 'inherit',
+                fontSize: 12,
+                fontWeight: 500,
+                letterSpacing: '0.01em',
+                cursor: requesting ? 'wait' : 'pointer',
+                opacity: requesting ? 0.7 : 1,
+              }}
+            >
+              {requesting ? 'Creating draft…' : 'Request fit-out quote'}
+            </button>
+          )}
+        </div>
       </header>
 
       <div
