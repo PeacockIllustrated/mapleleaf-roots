@@ -15,7 +15,11 @@ import {
   updateSlot as updateSlotAction,
   deleteSlot as deleteSlotAction,
   assignSlotProducts,
+  spreadShelf as spreadShelfAction,
 } from '@/lib/shelf/actions';
+import {
+  updateShelf as updateShelfAction,
+} from '@/lib/configurator/actions';
 import { ShelfCanvas } from './shelf-canvas';
 import { SlotInspector } from './slot-inspector';
 import { ProductPicker } from './product-picker';
@@ -36,6 +40,7 @@ type PickerTarget =
   | {
       mode: 'add';
       shelfId: string;
+      filterCategoryId?: string | null;
     }
   | null;
 
@@ -154,6 +159,7 @@ export function ShelvesClient({
         slot_order: nextOrder,
         width_mm: res.data.widthMm,
         facing_count: res.data.facingCount,
+        stack_count: 1,
         currently_stocking: product ? 'MAIN' : 'EMPTY',
         assignment: product
           ? {
@@ -184,7 +190,9 @@ export function ShelvesClient({
 
       const mainProduct = slot.assignment?.main ?? null;
       const baseWidth =
-        (mainProduct?.width_mm as number | null | undefined) ?? null;
+        (mainProduct?.shipper_width_mm as number | null | undefined) ??
+        (mainProduct?.width_mm as number | null | undefined) ??
+        null;
       const nextWidth =
         baseWidth && baseWidth > 0
           ? baseWidth * nextCount
@@ -207,12 +215,110 @@ export function ShelvesClient({
     [unit.id, unit.site_id, unit.shelves, patchSlot]
   );
 
+  const onAdjustStack = useCallback(
+    async (slotId: string, delta: 1 | -1) => {
+      const slot = (() => {
+        for (const sh of unit.shelves) {
+          for (const s of sh.slots) if (s.id === slotId) return s;
+        }
+        return null;
+      })();
+      if (!slot) return;
+      const next = Math.max(1, Math.min(6, slot.stack_count + delta));
+      if (next === slot.stack_count) return;
+      patchSlot(slotId, { stack_count: next });
+      const res = await updateSlotAction({
+        siteId: unit.site_id,
+        unitId: unit.id,
+        slotId,
+        stackCount: next,
+      });
+      if (!res.ok) setToast({ kind: 'error', message: res.message });
+    },
+    [unit.id, unit.site_id, unit.shelves, patchSlot]
+  );
+
+  const onAdjustShelfClearance = useCallback(
+    async (shelfId: string, delta: 20 | -20) => {
+      const shelf = unit.shelves.find((s) => s.id === shelfId);
+      if (!shelf) return;
+      const next = Math.max(60, shelf.clearance_mm + delta);
+      if (next === shelf.clearance_mm) return;
+
+      setUnit((prev) => ({
+        ...prev,
+        shelves: prev.shelves.map((sh) =>
+          sh.id === shelfId ? { ...sh, clearance_mm: next } : sh
+        ),
+      }));
+
+      const res = await updateShelfAction({
+        siteId: unit.site_id,
+        shelfId,
+        clearanceMm: next,
+      });
+      if (!res.ok) setToast({ kind: 'error', message: res.message });
+    },
+    [unit.site_id, unit.shelves]
+  );
+
+  const onSpreadShelf = useCallback(
+    async (shelfId: string) => {
+      const res = await spreadShelfAction({
+        siteId: unit.site_id,
+        unitId: unit.id,
+        shelfId,
+        unitWidthMm: unit.width_mm,
+      });
+      if (!res.ok) {
+        setToast({ kind: 'error', message: res.message });
+        return;
+      }
+      setToast({
+        kind: 'success',
+        message:
+          res.data.added > 0
+            ? `Spread shelf — ${res.data.added} facings added.`
+            : 'Shelf already fills the width.',
+      });
+      // Refresh server data so the updated facings + widths flow back.
+      // A small delay gives the DB + revalidate time to flush.
+      setTimeout(() => {
+        window.location.reload();
+      }, 150);
+    },
+    [unit.id, unit.site_id, unit.width_mm]
+  );
+
+  const onSuggestSimilar = useCallback(
+    (slotId: string) => {
+      const slot = (() => {
+        for (const sh of unit.shelves) {
+          for (const s of sh.slots) if (s.id === slotId) return s;
+        }
+        return null;
+      })();
+      if (!slot || !slot.assignment?.main) return;
+      const shelf = unit.shelves.find((s) =>
+        s.slots.some((x) => x.id === slotId)
+      );
+      if (!shelf) return;
+      setPicker({
+        mode: 'add',
+        shelfId: shelf.id,
+        filterCategoryId: slot.assignment.main.category_id ?? null,
+      });
+    },
+    [unit.shelves]
+  );
+
   const onUpdateSlot = useCallback(
     async (
       slotId: string,
       patch: {
         widthMm?: number;
         facingCount?: number;
+        stackCount?: number;
         currentlyStocking?: SlotStockingState;
       }
     ) => {
@@ -220,6 +326,8 @@ export function ShelvesClient({
       if (patch.widthMm !== undefined) localPatch.width_mm = patch.widthMm;
       if (patch.facingCount !== undefined)
         localPatch.facing_count = patch.facingCount;
+      if (patch.stackCount !== undefined)
+        localPatch.stack_count = patch.stackCount;
       if (patch.currentlyStocking !== undefined)
         localPatch.currently_stocking = patch.currentlyStocking;
       patchSlot(slotId, localPatch);
@@ -397,6 +505,20 @@ export function ShelvesClient({
           onAdjustFacings={(delta) =>
             selectedSlot ? onAdjustFacings(selectedSlot.id, delta) : undefined
           }
+          onAdjustStack={(delta) =>
+            selectedSlot ? onAdjustStack(selectedSlot.id, delta) : undefined
+          }
+          onAdjustShelfClearance={(delta) =>
+            selectedShelf
+              ? onAdjustShelfClearance(selectedShelf.id, delta)
+              : undefined
+          }
+          onSpreadShelf={() =>
+            selectedShelf ? onSpreadShelf(selectedShelf.id) : undefined
+          }
+          onSuggestSimilar={() =>
+            selectedSlot ? onSuggestSimilar(selectedSlot.id) : undefined
+          }
           onDelete={() =>
             selectedSlot ? onDeleteSlot(selectedSlot.id) : undefined
           }
@@ -413,12 +535,15 @@ export function ShelvesClient({
               : selectedShelf;
           const kind: 'main' | 'sub_a' | 'sub_b' =
             picker.mode === 'add' ? 'main' : picker.kind;
+          const filterCategoryId =
+            picker.mode === 'add' ? picker.filterCategoryId ?? null : null;
           return (
             <ProductPicker
               products={products}
               targetShelf={contextShelf}
               mode={picker.mode}
               kind={kind}
+              filterCategoryId={filterCategoryId}
               onClose={() => setPicker(null)}
               onChoose={onPickerChoose}
             />

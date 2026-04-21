@@ -596,13 +596,21 @@ function SlotShape({
   const labelSize = Math.max(12, Math.min(20, facingW / 12));
   const brandSize = Math.max(10, Math.min(13, facingW / 18));
 
-  // Product box occupies the middle-ish portion of the slot zone. If the
-  // product has a height_mm, respect it (scaled); otherwise fill the zone.
+  // Product box occupies the middle-ish portion of the slot zone. When a
+  // stack_count > 1 is set, the box grows vertically up to stack_count ×
+  // per-unit facing height, capped by the shelf clearance.
+  const singleFacingHeight =
+    product?.shipper_height_mm ?? product?.height_mm ?? null;
+  const stack = Math.max(1, slot.stack_count);
   const productBoxHeight = Math.min(
     height - 14,
-    product?.height_mm ?? height - 14
+    singleFacingHeight
+      ? singleFacingHeight * stack
+      : height - 14
   );
   const productBoxTop = bottomY - 8 - productBoxHeight;
+  const singleRowHeight =
+    productBoxHeight / stack;
 
   return (
     <g
@@ -643,17 +651,33 @@ function SlotShape({
               rx={3}
               ry={3}
             />
-            {product?.image_url && (
-              <image
-                href={product.image_url}
-                x={fx + 6}
-                y={productBoxTop + 4}
-                width={facingW - 12}
-                height={productBoxHeight - 12}
-                preserveAspectRatio="xMidYMax meet"
-                style={{ pointerEvents: 'none' }}
-              />
-            )}
+            {/* Stack dividers */}
+            {stack > 1 &&
+              Array.from({ length: stack - 1 }).map((_, r) => (
+                <line
+                  key={`div-${r}`}
+                  x1={fx + 2}
+                  x2={fx + facingW - 2}
+                  y1={productBoxTop + (r + 1) * singleRowHeight}
+                  y2={productBoxTop + (r + 1) * singleRowHeight}
+                  stroke={innerStroke}
+                  strokeWidth={0.5}
+                  strokeDasharray="3 3"
+                />
+              ))}
+            {product?.image_url &&
+              Array.from({ length: stack }).map((_, r) => (
+                <image
+                  key={`img-${r}`}
+                  href={product.image_url as string}
+                  x={fx + 6}
+                  y={productBoxTop + r * singleRowHeight + 2}
+                  width={facingW - 12}
+                  height={Math.max(0, singleRowHeight - 6)}
+                  preserveAspectRatio="xMidYMax meet"
+                  style={{ pointerEvents: 'none' }}
+                />
+              ))}
             {product && !product.image_url && (
               <>
                 <text
@@ -726,7 +750,7 @@ function SlotShape({
       >
         #{slot.slot_order}
       </text>
-      {facings > 1 && (
+      {(facings > 1 || slot.stack_count > 1) && (
         <text
           x={x + width - 8}
           y={topY + 18}
@@ -737,7 +761,7 @@ function SlotShape({
           textAnchor="end"
           pointerEvents="none"
         >
-          ×{facings}
+          {`${facings}w${slot.stack_count > 1 ? ` × ${slot.stack_count}h` : ''}`}
         </text>
       )}
     </g>

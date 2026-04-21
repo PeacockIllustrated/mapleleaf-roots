@@ -8,6 +8,7 @@ interface Props {
   targetShelf: ShelfRow | null;
   mode: 'add' | 'assign';
   kind: 'main' | 'sub_a' | 'sub_b';
+  filterCategoryId?: string | null;
   onClose: () => void;
   onChoose: (product: ProductSummary | null) => void;
 }
@@ -23,6 +24,7 @@ export function ProductPicker({
   targetShelf,
   mode,
   kind,
+  filterCategoryId,
   onClose,
   onChoose,
 }: Props) {
@@ -47,6 +49,7 @@ export function ProductPicker({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return products.filter((p) => {
+      if (filterCategoryId && p.category_id !== filterCategoryId) return false;
       if (zoneFilter !== 'ALL' && p.temperature_zone !== zoneFilter)
         return false;
       if (
@@ -63,7 +66,7 @@ export function ProductPicker({
         (p.gtin ?? '').includes(q)
       );
     });
-  }, [products, query, zoneFilter, fitOnly, shelfClearance]);
+  }, [products, query, zoneFilter, fitOnly, shelfClearance, filterCategoryId]);
 
   return (
     <div

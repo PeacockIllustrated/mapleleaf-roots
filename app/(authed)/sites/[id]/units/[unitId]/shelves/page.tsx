@@ -53,6 +53,7 @@ type RawUnit = {
           slot_order: number;
           width_mm: number;
           facing_count: number;
+          stack_count: number;
           currently_stocking: SlotStockingState;
           assignment: Array<{
             id: string;
@@ -98,19 +99,25 @@ export default async function ShelvesPage({ params }: Props) {
          promo_section_id,
          slots:site_unit_slots (
            id, site_unit_shelf_id, slot_order, width_mm, facing_count,
-           currently_stocking,
+           stack_count, currently_stocking,
            assignment:slot_product_assignments (
              id,
              main:products!main_product_id (
-               id, name, brand, category_id, width_mm, height_mm, depth_mm,
+               id, name, brand, category_id,
+               width_mm, height_mm, depth_mm,
+               shipper_width_mm, shipper_height_mm, shipper_depth_mm, units_per_shipper,
                gtin, image_url, thumbnail_url, temperature_zone
              ),
              sub_a:products!substitute_a_product_id (
-               id, name, brand, category_id, width_mm, height_mm, depth_mm,
+               id, name, brand, category_id,
+               width_mm, height_mm, depth_mm,
+               shipper_width_mm, shipper_height_mm, shipper_depth_mm, units_per_shipper,
                gtin, image_url, thumbnail_url, temperature_zone
              ),
              sub_b:products!substitute_b_product_id (
-               id, name, brand, category_id, width_mm, height_mm, depth_mm,
+               id, name, brand, category_id,
+               width_mm, height_mm, depth_mm,
+               shipper_width_mm, shipper_height_mm, shipper_depth_mm, units_per_shipper,
                gtin, image_url, thumbnail_url, temperature_zone
              )
            )
@@ -149,6 +156,7 @@ export default async function ShelvesPage({ params }: Props) {
             slot_order: raw.slot_order,
             width_mm: raw.width_mm,
             facing_count: raw.facing_count,
+            stack_count: raw.stack_count ?? 1,
             currently_stocking: raw.currently_stocking,
             assignment,
           };
@@ -228,7 +236,10 @@ export default async function ShelvesPage({ params }: Props) {
   const { data: productRows } = await supabase
     .from('products')
     .select(
-      'id, name, brand, category_id, width_mm, height_mm, depth_mm, gtin, image_url, thumbnail_url, temperature_zone'
+      `id, name, brand, category_id,
+       width_mm, height_mm, depth_mm,
+       shipper_width_mm, shipper_height_mm, shipper_depth_mm, units_per_shipper,
+       gtin, image_url, thumbnail_url, temperature_zone`
     )
     .eq('is_active', true)
     .order('brand')

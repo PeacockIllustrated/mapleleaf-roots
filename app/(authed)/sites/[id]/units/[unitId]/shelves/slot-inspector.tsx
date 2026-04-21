@@ -8,6 +8,7 @@ import type {
   ShelfSlot,
   SlotStockingState,
 } from '@/lib/shelf/types';
+import { facingHeightMm } from '@/lib/shelf/types';
 
 interface Props {
   unitLabel: string;
@@ -21,10 +22,15 @@ interface Props {
     | ((patch: {
         widthMm?: number;
         facingCount?: number;
+        stackCount?: number;
         currentlyStocking?: SlotStockingState;
       }) => void)
     | undefined;
   onAdjustFacings: ((delta: 1 | -1) => void) | undefined;
+  onAdjustStack: ((delta: 1 | -1) => void) | undefined;
+  onAdjustShelfClearance: ((delta: 20 | -20) => void) | undefined;
+  onSpreadShelf: (() => void) | undefined;
+  onSuggestSimilar: (() => void) | undefined;
   onDelete: (() => void) | undefined;
   onPickProduct: (slotId: string, kind: 'main' | 'sub_a' | 'sub_b') => void;
   onClose: () => void;
@@ -55,6 +61,10 @@ export function SlotInspector({
   usedOnShelfMm,
   onUpdate,
   onAdjustFacings,
+  onAdjustStack,
+  onAdjustShelfClearance,
+  onSpreadShelf,
+  onSuggestSimilar,
   onDelete,
   onPickProduct,
   onClose,
@@ -96,6 +106,14 @@ export function SlotInspector({
   const subAProduct = slot.assignment?.sub_a ?? null;
   const subBProduct = slot.assignment?.sub_b ?? null;
 
+  const facingH = facingHeightMm(mainProduct);
+  const maxStackByHeight =
+    facingH && facingH > 0
+      ? Math.min(6, Math.max(1, Math.floor(shelf.clearance_mm / facingH)))
+      : 6;
+  const canStackUp = slot.stack_count < Math.min(6, maxStackByHeight);
+  const canStackDown = slot.stack_count > 1;
+
   return (
     <aside style={panel}>
       <div style={headerBlock}>
@@ -124,8 +142,25 @@ export function SlotInspector({
             value={slot.facing_count}
             canEdit={canEdit}
             widthMm={slot.width_mm}
-            facingWidthMm={slot.assignment?.main?.width_mm ?? null}
+            facingWidthMm={
+              mainProduct
+                ? mainProduct.shipper_width_mm ??
+                  mainProduct.width_mm ??
+                  null
+                : null
+            }
             onAdjust={(delta) => onAdjustFacings?.(delta)}
+          />
+        </Field>
+
+        <Field label="Stack (vertical)">
+          <StackControl
+            value={slot.stack_count}
+            canStackUp={canEdit && canStackUp}
+            canStackDown={canEdit && canStackDown}
+            clearanceMm={shelf.clearance_mm}
+            facingHeightMm={facingH}
+            onAdjust={(delta) => onAdjustStack?.(delta)}
           />
         </Field>
 
@@ -211,6 +246,78 @@ export function SlotInspector({
             );
           })}
         </div>
+
+        <SectionHeader title={`Shelf ${shelf.shelf_order}`} />
+
+        <Field label="Shelf clearance">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <StepBtn
+              label="−"
+              aria="Reduce clearance by 20mm"
+              onClick={() => onAdjustShelfClearance?.(-20)}
+              disabled={!canEdit || shelf.clearance_mm <= 60}
+            />
+            <span
+              style={{
+                fontSize: 13,
+                fontFamily:
+                  'ui-monospace, "SFMono-Regular", Menlo, monospace',
+                minWidth: 74,
+                textAlign: 'center',
+                color: 'var(--ml-text-primary)',
+              }}
+            >
+              {shelf.clearance_mm} mm
+            </span>
+            <StepBtn
+              label="+"
+              aria="Increase clearance by 20mm"
+              onClick={() => onAdjustShelfClearance?.(20)}
+              disabled={!canEdit}
+            />
+            <span
+              style={{
+                marginLeft: 'auto',
+                fontSize: 11,
+                color: 'var(--ml-text-muted)',
+              }}
+            >
+              {facingH ? `${Math.floor(shelf.clearance_mm / facingH)} fit` : ''}
+            </span>
+          </div>
+        </Field>
+
+        {canEdit && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <button
+              type="button"
+              onClick={onSpreadShelf}
+              style={shelfActionButton}
+            >
+              Spread shelf
+              <span style={shelfActionHint}>
+                Fill remaining space with more facings of what’s already placed.
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={onSuggestSimilar}
+              disabled={!mainProduct}
+              style={{
+                ...shelfActionButton,
+                opacity: mainProduct ? 1 : 0.55,
+                cursor: mainProduct ? 'pointer' : 'not-allowed',
+              }}
+            >
+              Suggest similar product
+              <span style={shelfActionHint}>
+                {mainProduct
+                  ? 'Open the picker filtered to products like the main on this slot.'
+                  : 'Assign a main product first.'}
+              </span>
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={footer}>
@@ -410,6 +517,146 @@ function ShelfBudget({
     </div>
   );
 }
+
+function StackControl({
+  value,
+  canStackUp,
+  canStackDown,
+  clearanceMm,
+  facingHeightMm,
+  onAdjust,
+}: {
+  value: number;
+  canStackUp: boolean;
+  canStackDown: boolean;
+  clearanceMm: number;
+  facingHeightMm: number | null;
+  onAdjust: (delta: 1 | -1) => void;
+}) {
+  const stackedH =
+    facingHeightMm && facingHeightMm > 0 ? facingHeightMm * value : null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <StepBtn
+        label="−"
+        aria="Reduce stack"
+        onClick={() => onAdjust(-1)}
+        disabled={!canStackDown}
+      />
+      <div
+        style={{
+          minWidth: 74,
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+            color: 'var(--ml-text-primary)',
+            lineHeight: 1,
+          }}
+        >
+          {value}
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            color: 'var(--ml-text-muted)',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+          }}
+        >
+          high
+        </span>
+      </div>
+      <StepBtn
+        label="+"
+        aria="Add stack"
+        onClick={() => onAdjust(1)}
+        disabled={!canStackUp}
+      />
+      <span
+        style={{
+          marginLeft: 'auto',
+          fontSize: 11,
+          color: 'var(--ml-text-muted)',
+          fontFamily: 'ui-monospace, "SFMono-Regular", Menlo, monospace',
+          textAlign: 'right',
+        }}
+      >
+        {stackedH
+          ? `${stackedH}/${clearanceMm} mm`
+          : `clearance ${clearanceMm} mm`}
+      </span>
+    </div>
+  );
+}
+
+function StepBtn({
+  label,
+  aria,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  aria: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={aria}
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: 'var(--ml-radius-md)',
+        background: 'var(--ml-off-white)',
+        color: 'var(--ml-charcoal)',
+        border: '0.5px solid var(--ml-border-default)',
+        fontFamily: 'inherit',
+        fontSize: 17,
+        fontWeight: 500,
+        lineHeight: 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
+        transition: 'background var(--ml-motion-fast) var(--ml-ease-out)',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+const shelfActionButton: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  gap: 2,
+  padding: '10px 12px',
+  border: '0.5px solid var(--ml-border-default)',
+  borderRadius: 'var(--ml-radius-md)',
+  background: 'var(--ml-off-white)',
+  fontFamily: 'inherit',
+  fontSize: 12,
+  fontWeight: 500,
+  color: 'var(--ml-text-primary)',
+  cursor: 'pointer',
+  textAlign: 'left',
+};
+
+const shelfActionHint: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 400,
+  color: 'var(--ml-text-muted)',
+};
 
 function FacingControl({
   value,

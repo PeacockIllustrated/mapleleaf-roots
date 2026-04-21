@@ -13,10 +13,26 @@ export interface ProductSummary {
   width_mm: number | null;
   height_mm: number | null;
   depth_mm: number | null;
+  shipper_width_mm: number | null;
+  shipper_height_mm: number | null;
+  shipper_depth_mm: number | null;
+  units_per_shipper: number | null;
   gtin: string | null;
   image_url: string | null;
   thumbnail_url: string | null;
   temperature_zone: 'AMBIENT' | 'CHILLED' | 'FROZEN';
+}
+
+/** Effective on-shelf width of a single facing — shipper box if defined. */
+export function facingWidthMm(p: ProductSummary | null): number | null {
+  if (!p) return null;
+  return p.shipper_width_mm ?? p.width_mm ?? null;
+}
+
+/** Effective on-shelf height of a single facing — shipper box if defined. */
+export function facingHeightMm(p: ProductSummary | null): number | null {
+  if (!p) return null;
+  return p.shipper_height_mm ?? p.height_mm ?? null;
 }
 
 export interface SlotAssignment {
@@ -32,6 +48,7 @@ export interface ShelfSlot {
   slot_order: number;
   width_mm: number;
   facing_count: number;
+  stack_count: number;
   currently_stocking: SlotStockingState;
   assignment: SlotAssignment | null;
 }

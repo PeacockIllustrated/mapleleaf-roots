@@ -33,6 +33,7 @@ const updateSlotSchema = z.object({
   slotId: z.string().uuid(),
   widthMm: z.number().int().positive().max(5000).optional(),
   facingCount: z.number().int().positive().max(60).optional(),
+  stackCount: z.number().int().min(1).max(6).optional(),
   currentlyStocking: z
     .enum(['MAIN', 'SUB_A', 'SUB_B', 'EMPTY', 'OUT_OF_SPEC'])
     .optional(),
@@ -65,12 +66,13 @@ export async function addSlot(
 
   const supabase = await createServerClient();
 
-  // If a product is supplied, compute width from its own width × facings.
+  // If a product is supplied, compute width from the on-shelf facing width
+  // (shipper box if defined, else the individual product) × facings.
   let resolvedWidth = v.widthMm ?? 0;
   if (v.mainProductId) {
     const { data: product, error: prodErr } = await supabase
       .from('products')
-      .select('width_mm')
+      .select('width_mm, shipper_width_mm')
       .eq('id', v.mainProductId)
       .single();
     if (prodErr || !product) {
@@ -79,15 +81,17 @@ export async function addSlot(
         message: prodErr?.message ?? 'Main product not found',
       };
     }
-    const pw = (product.width_mm as number | null) ?? 0;
-    if (pw <= 0) {
+    const facingW =
+      ((product.shipper_width_mm as number | null) ?? 0) ||
+      ((product.width_mm as number | null) ?? 0);
+    if (facingW <= 0) {
       return {
         ok: false,
         message:
           'That product has no width recorded. Either pick another product or add an empty slot.',
       };
     }
-    resolvedWidth = pw * v.facingCount;
+    resolvedWidth = facingW * v.facingCount;
   }
 
   if (!Number.isFinite(resolvedWidth) || resolvedWidth <= 0) {
@@ -155,12 +159,20 @@ export async function updateSlot(
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? 'Bad input' };
   }
-  const { siteId, unitId, slotId, widthMm, facingCount, currentlyStocking } =
-    parsed.data;
+  const {
+    siteId,
+    unitId,
+    slotId,
+    widthMm,
+    facingCount,
+    stackCount,
+    currentlyStocking,
+  } = parsed.data;
 
   const patch: Record<string, unknown> = {};
   if (widthMm !== undefined) patch.width_mm = widthMm;
   if (facingCount !== undefined) patch.facing_count = facingCount;
+  if (stackCount !== undefined) patch.stack_count = stackCount;
   if (currentlyStocking !== undefined)
     patch.currently_stocking = currentlyStocking;
 
@@ -175,6 +187,135 @@ export async function updateSlot(
 
   revalidatePath(`/sites/${siteId}/units/${unitId}/shelves`);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Spread shelf — fill remaining whitespace by adding facings to existing
+// product-backed slots (round-robin, least-facings-first). Empty placeholder
+// slots are left as-is; the user can manually assign products or widen them.
+// ---------------------------------------------------------------------------
+
+const spreadShelfSchema = z.object({
+  siteId: z.string().uuid(),
+  unitId: z.string().uuid(),
+  shelfId: z.string().uuid(),
+  unitWidthMm: z.number().int().positive().max(5000),
+});
+
+export async function spreadShelf(
+  input: unknown
+): Promise<ShelfActionResult<{ added: number }>> {
+  await requireRole(WRITE_ROLES);
+  const parsed = spreadShelfSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? 'Bad input' };
+  }
+  const { siteId, unitId, shelfId, unitWidthMm } = parsed.data;
+
+  const supabase = await createServerClient();
+
+  const { data: slots, error: slotErr } = await supabase
+    .from('site_unit_slots')
+    .select(
+      `id, width_mm, facing_count,
+       assignment:slot_product_assignments (
+         main:products!main_product_id (
+           width_mm, shipper_width_mm
+         )
+       )`
+    )
+    .eq('site_unit_shelf_id', shelfId)
+    .order('slot_order');
+
+  if (slotErr) return { ok: false, message: slotErr.message };
+
+  type SlotShape = {
+    id: string;
+    width_mm: number;
+    facing_count: number;
+    facingW: number;
+  };
+
+  type Raw = (typeof slots extends Array<infer X> | null ? X : never) & {
+    assignment:
+      | Array<{
+          main:
+            | { width_mm: number | null; shipper_width_mm: number | null }
+            | Array<{ width_mm: number | null; shipper_width_mm: number | null }>
+            | null;
+        }>
+      | {
+          main:
+            | { width_mm: number | null; shipper_width_mm: number | null }
+            | Array<{ width_mm: number | null; shipper_width_mm: number | null }>
+            | null;
+        }
+      | null;
+  };
+
+  const candidates: SlotShape[] = ((slots ?? []) as unknown as Raw[])
+    .map((s) => {
+      const assignment = Array.isArray(s.assignment) ? s.assignment[0] : s.assignment;
+      const main = assignment
+        ? Array.isArray(assignment.main)
+          ? assignment.main[0]
+          : assignment.main
+        : null;
+      const facingW =
+        ((main?.shipper_width_mm as number | null) ?? 0) ||
+        ((main?.width_mm as number | null) ?? 0);
+      if (!facingW || facingW <= 0) return null;
+      return {
+        id: s.id as string,
+        width_mm: s.width_mm as number,
+        facing_count: s.facing_count as number,
+        facingW,
+      } satisfies SlotShape;
+    })
+    .filter((x): x is SlotShape => x !== null);
+
+  if (candidates.length === 0) {
+    return {
+      ok: false,
+      message: 'Nothing to spread — assign a product to at least one slot first.',
+    };
+  }
+
+  let used = candidates.reduce((acc, s) => acc + s.width_mm, 0);
+  // Also count any empty/non-candidate slots toward used so we don't overflow.
+  const totalUsedIncludingEmpties = ((slots ?? []) as unknown as Raw[])
+    .reduce((acc, s) => acc + (s.width_mm as number), 0);
+  used = totalUsedIncludingEmpties;
+
+  let added = 0;
+  // Round-robin, bump the lowest-facing candidate that fits.
+  // Stop when no candidate can grow by one facing.
+  // Guard loop with a reasonable upper bound.
+  for (let i = 0; i < 2000; i++) {
+    const remaining = unitWidthMm - used;
+    if (remaining <= 0) break;
+
+    candidates.sort((a, b) => a.facing_count - b.facing_count);
+    const next = candidates.find((s) => s.facingW <= remaining);
+    if (!next) break;
+
+    next.facing_count += 1;
+    next.width_mm += next.facingW;
+    used += next.facingW;
+    added += 1;
+  }
+
+  // Persist the changes for slots that actually moved.
+  for (const s of candidates) {
+    const { error } = await supabase
+      .from('site_unit_slots')
+      .update({ facing_count: s.facing_count, width_mm: s.width_mm })
+      .eq('id', s.id);
+    if (error) return { ok: false, message: error.message };
+  }
+
+  revalidatePath(`/sites/${siteId}/units/${unitId}/shelves`);
+  return { ok: true, data: { added } };
 }
 
 export async function deleteSlot(input: unknown): Promise<ShelfActionResult> {
