@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PromoSectionSummary } from '@/lib/configurator/types';
 import type {
   ShelfRow,
@@ -17,6 +17,20 @@ interface Props {
   totalSlotWidthByShelf: Map<string, number>;
   onSelectSlot: (slotId: string | null) => void;
   onAddSlot: (shelfId: string) => void;
+}
+
+type ViewBox = { x: number; y: number; w: number; h: number };
+
+function fmtViewBox(v: ViewBox): string {
+  return `${v.x} ${v.y} ${v.w} ${v.h}`;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function easeInOut(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
 const HEADER_MM = 360;
@@ -100,6 +114,107 @@ export function ShelfCanvas({
   const unitPromo =
     (unit.promo_section_id && promoById.get(unit.promo_section_id)) || null;
 
+  // --- Railed zoom/pan -----------------------------------------------------
+  // Overview shows the whole unit. Focusing a shelf animates the SVG viewBox
+  // to frame just that shelf (with a little context above + below). Arrow
+  // keys cycle shelves while focused; Esc / overview button exits.
+
+  const overviewViewBox: ViewBox = useMemo(
+    () => ({
+      x: -GUTTER_MM,
+      y: -20,
+      w: unit.width_mm + GUTTER_MM * 2,
+      h: unitHeight + 40,
+    }),
+    [unit.width_mm, unitHeight]
+  );
+
+  const shelfViewBoxFor = useCallback(
+    (index: number): ViewBox | null => {
+      const row = layout.rows[index];
+      if (!row) return null;
+      const { zoneTopY, plateBottomY } = row;
+      const contextY = 60;
+      return {
+        x: -GUTTER_MM,
+        y: Math.max(0, zoneTopY - contextY),
+        w: unit.width_mm + GUTTER_MM * 2,
+        h: plateBottomY - zoneTopY + contextY * 2,
+      };
+    },
+    [layout.rows, unit.width_mm]
+  );
+
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const [viewBox, setViewBox] = useState<ViewBox>(overviewViewBox);
+  const animRef = useRef<number | null>(null);
+
+  // When the unit's intrinsic overview box changes (e.g. shelf count edit),
+  // make sure an unfocused canvas reflects the new overview.
+  useEffect(() => {
+    if (focusedIndex === null) setViewBox(overviewViewBox);
+  }, [overviewViewBox, focusedIndex]);
+
+  useEffect(() => {
+    const target =
+      focusedIndex === null
+        ? overviewViewBox
+        : shelfViewBoxFor(focusedIndex) ?? overviewViewBox;
+    const from = viewBox;
+    const duration = 320;
+    const start = performance.now();
+    if (animRef.current !== null) cancelAnimationFrame(animRef.current);
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const e = easeInOut(t);
+      setViewBox({
+        x: lerp(from.x, target.x, e),
+        y: lerp(from.y, target.y, e),
+        w: lerp(from.w, target.w, e),
+        h: lerp(from.h, target.h, e),
+      });
+      if (t < 1) animRef.current = requestAnimationFrame(tick);
+      else animRef.current = null;
+    };
+    animRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (animRef.current !== null) cancelAnimationFrame(animRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedIndex, overviewViewBox, shelfViewBoxFor]);
+
+  // Keyboard: Esc to overview, Up/Down to cycle shelves when focused.
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      // Only intercept when the canvas container has focus or hover.
+      const target = containerRef.current;
+      if (!target) return;
+      if (
+        !target.contains(document.activeElement as Node) &&
+        !target.matches(':hover')
+      )
+        return;
+
+      if (e.key === 'Escape' && focusedIndex !== null) {
+        e.preventDefault();
+        setFocusedIndex(null);
+      } else if (focusedIndex !== null && e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocusedIndex((i) => (i === null || i === 0 ? i : i - 1));
+      } else if (focusedIndex !== null && e.key === 'ArrowDown') {
+        e.preventDefault();
+        setFocusedIndex((i) => {
+          if (i === null) return null;
+          return i < unit.shelves.length - 1 ? i + 1 : i;
+        });
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focusedIndex, unit.shelves.length]);
+
   return (
     <div
       style={{
@@ -112,8 +227,11 @@ export function ShelfCanvas({
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
-        overflow: 'auto',
+        overflow: 'hidden',
+        position: 'relative',
       }}
+      ref={containerRef}
+      tabIndex={0}
       onClick={(e) => {
         if (e.target === e.currentTarget) onSelectSlot(null);
       }}
@@ -149,8 +267,8 @@ export function ShelfCanvas({
       </div>
 
       <svg
-        viewBox={`-${GUTTER_MM} -20 ${unit.width_mm + GUTTER_MM * 2} ${unitHeight + 40}`}
-        preserveAspectRatio="xMidYMin meet"
+        viewBox={fmtViewBox(viewBox)}
+        preserveAspectRatio="xMidYMid meet"
         style={{
           width: '100%',
           height: 'auto',
@@ -315,7 +433,116 @@ export function ShelfCanvas({
           fill="rgba(65, 64, 66, 0.18)"
         />
       </svg>
+
+      {/* Navigation rail — shelf chips for zoom-to-shelf + overview toggle */}
+      <nav
+        aria-label="Shelf navigation"
+        style={{
+          position: 'absolute',
+          left: 10,
+          top: 72,
+          bottom: 24,
+          width: 36,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'stretch',
+          gap: 6,
+          padding: 4,
+          background: 'rgba(255, 255, 255, 0.92)',
+          border: '0.5px solid var(--ml-border-default)',
+          borderRadius: 999,
+          boxShadow: '0 6px 18px rgba(65, 64, 66, 0.1)',
+          overflow: 'hidden',
+        }}
+      >
+        <RailButton
+          label="All"
+          active={focusedIndex === null}
+          onClick={() => setFocusedIndex(null)}
+          ariaLabel="Show full unit"
+        />
+        {unit.shelves.map((s, i) => (
+          <RailButton
+            key={s.id}
+            label={String(s.shelf_order)}
+            active={focusedIndex === i}
+            onClick={() => setFocusedIndex(i)}
+            ariaLabel={`Focus shelf ${s.shelf_order}`}
+          />
+        ))}
+      </nav>
+
+      {/* Inline help — only when focused */}
+      {focusedIndex !== null && (
+        <div
+          style={{
+            position: 'absolute',
+            right: 14,
+            top: 14,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 12px',
+            background: 'rgba(255, 255, 255, 0.92)',
+            border: '0.5px solid var(--ml-border-default)',
+            borderRadius: 999,
+            fontSize: 11,
+            color: 'var(--ml-text-muted)',
+            boxShadow: '0 6px 18px rgba(65, 64, 66, 0.1)',
+          }}
+        >
+          <span
+            style={{
+              fontFamily: 'ui-monospace, "SFMono-Regular", Menlo, monospace',
+              color: 'var(--ml-text-primary)',
+              fontWeight: 500,
+            }}
+          >
+            Shelf {unit.shelves[focusedIndex]?.shelf_order ?? ''}
+          </span>
+          <span style={{ opacity: 0.6 }}>·</span>
+          <span>↑ ↓ switch · Esc overview</span>
+        </div>
+      )}
     </div>
+  );
+}
+
+function RailButton({
+  label,
+  active,
+  ariaLabel,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  ariaLabel: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      aria-pressed={active}
+      onClick={onClick}
+      style={{
+        height: 28,
+        width: '100%',
+        flexShrink: 0,
+        borderRadius: 999,
+        border: '0.5px solid transparent',
+        background: active ? '#414042' : 'transparent',
+        color: active ? '#FFFFFF' : '#414042',
+        fontFamily: 'Poppins, system-ui, sans-serif',
+        fontWeight: 500,
+        fontSize: 11,
+        cursor: 'pointer',
+        transition:
+          'background var(--ml-motion-fast) var(--ml-ease-out), color var(--ml-motion-fast) var(--ml-ease-out)',
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
