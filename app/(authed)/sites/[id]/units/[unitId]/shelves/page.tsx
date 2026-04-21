@@ -12,6 +12,7 @@ import type {
 } from '@/lib/shelf/types';
 import type { PromoSectionSummary } from '@/lib/configurator/types';
 import { ShelvesClient } from './shelves-client';
+import { LoadError } from '@/components/brand/LoadError';
 
 interface Props {
   params: Promise<{ id: string; unitId: string }>;
@@ -72,6 +73,9 @@ function firstOrNull<T>(v: T | T[] | null | undefined): T | null {
   return v ?? null;
 }
 
+/** PostgREST code for "Results contain 0 rows" — a genuine not-found. */
+const PG_NO_ROWS = 'PGRST116';
+
 export default async function ShelvesPage({ params }: Props) {
   const { id, unitId } = await params;
   const profile = await currentProfile();
@@ -80,15 +84,26 @@ export default async function ShelvesPage({ params }: Props) {
   const supabase = await createServerClient();
 
   // Site (to confirm access + give the breadcrumb title)
-  const { data: site } = await supabase
+  const { data: site, error: siteErr } = await supabase
     .from('sites')
     .select('id, name')
     .eq('id', id)
     .single();
+  if (siteErr && siteErr.code !== PG_NO_ROWS) {
+    return (
+      <LoadError
+        title="Couldn't load this site"
+        backHref="/sites"
+        backLabel="All sites"
+        hint="The database rejected the query for the sites table. The deployed schema may be behind the app — check that every migration in supabase/migrations/ has been applied to the active Supabase project."
+        detail={siteErr.message}
+      />
+    );
+  }
   if (!site) notFound();
 
   // The unit — joined with shelves, slots, and each slot's product assignment.
-  const { data: raw } = await supabase
+  const { data: raw, error: unitErr } = await supabase
     .from('site_units')
     .select(
       `id, label, promo_section_id, site_planogram_id, unit_type_id, notes,
@@ -128,6 +143,28 @@ export default async function ShelvesPage({ params }: Props) {
     .eq('id', unitId)
     .single();
 
+  if (unitErr && unitErr.code !== PG_NO_ROWS) {
+    // This is the exact failure mode that bit us on the deployed preview:
+    // when the shipper/stack_count columns or the pos_material_requests
+    // table don't exist on the deployed Supabase project, PostgREST errors
+    // out and we previously swallowed it as a 404. Show the actual error
+    // so the next schema drift is obvious.
+    return (
+      <LoadError
+        title="Couldn't load this unit"
+        backHref={`/sites/${id}/planogram`}
+        backLabel="Back to planogram"
+        hint={
+          'The nested query on site_units / site_unit_slots / products ' +
+          'failed. Most often this means the deployed Supabase project is ' +
+          'missing one of the later migrations (003-shipper/stack/POS ' +
+          'requests, 004-pos artwork, 005-clearance lock). Apply any ' +
+          'pending migrations from supabase/migrations/ and reload.'
+        }
+        detail={unitErr.message}
+      />
+    );
+  }
   if (!raw) notFound();
   const unit = raw as unknown as RawUnit;
   const ut = firstOrNull(unit.unit_type);

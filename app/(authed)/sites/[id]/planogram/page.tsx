@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { currentProfile } from '@/lib/auth/require-role';
 import { createServerClient } from '@/lib/supabase/server';
 import { PlanogramClient } from './planogram-client';
+import { LoadError } from '@/components/brand/LoadError';
 import type {
   PlacedUnit,
   PromoSectionSummary,
@@ -16,6 +17,8 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
+const PG_NO_ROWS = 'PGRST116';
+
 export default async function PlanogramPage({ params }: Props) {
   const { id } = await params;
   const profile = await currentProfile();
@@ -23,26 +26,54 @@ export default async function PlanogramPage({ params }: Props) {
 
   const supabase = await createServerClient();
 
-  const [{ data: site }, { data: unitTypes }, { data: promoSections }] =
-    await Promise.all([
-      supabase
-        .from('sites')
-        .select('id, name, code, onboarding_status')
-        .eq('id', id)
-        .single(),
-      supabase
-        .from('unit_types')
-        .select(
-          'id, code, display_name, category, width_mm, depth_mm, height_mm, is_double_sided, is_refrigerated, temperature_zone, default_shelf_count, sort_order'
-        )
-        .eq('is_active', true)
-        .order('sort_order'),
-      supabase
-        .from('promo_sections')
-        .select('id, code, display_name, hex_colour, sort_order')
-        .eq('is_active', true)
-        .order('sort_order'),
-    ]);
+  const [
+    { data: site, error: siteErr },
+    { data: unitTypes, error: utErr },
+    { data: promoSections, error: psErr },
+  ] = await Promise.all([
+    supabase
+      .from('sites')
+      .select('id, name, code, onboarding_status')
+      .eq('id', id)
+      .single(),
+    supabase
+      .from('unit_types')
+      .select(
+        'id, code, display_name, category, width_mm, depth_mm, height_mm, is_double_sided, is_refrigerated, temperature_zone, default_shelf_count, sort_order'
+      )
+      .eq('is_active', true)
+      .order('sort_order'),
+    supabase
+      .from('promo_sections')
+      .select('id, code, display_name, hex_colour, sort_order')
+      .eq('is_active', true)
+      .order('sort_order'),
+  ]);
+
+  // Surface real DB errors — the previous silent 404 was impossible to
+  // debug when the deployed Supabase schema drifted from the app's
+  // expectations. PGRST116 ("0 rows") is still a genuine not-found.
+  const firstErr =
+    (siteErr && siteErr.code !== PG_NO_ROWS && siteErr) ||
+    utErr ||
+    psErr ||
+    null;
+  if (firstErr) {
+    return (
+      <LoadError
+        title="Couldn't load the planogram"
+        backHref="/sites"
+        backLabel="All sites"
+        hint={
+          'One of the reference queries (sites, unit_types, promo_sections) ' +
+          'errored. Usually this means the deployed Supabase project is ' +
+          'behind on migrations — apply any pending files in ' +
+          'supabase/migrations/ and reload.'
+        }
+        detail={firstErr.message}
+      />
+    );
+  }
 
   if (!site) notFound();
 
