@@ -22,6 +22,10 @@ import { ShelfCanvas } from './shelf-canvas';
 import { SlotInspector } from './slot-inspector';
 import { ProductPicker } from './product-picker';
 import { PosIssuesDialog, type PosIssue } from './pos-issues-dialog';
+import {
+  reportPosIssue as reportPosIssueAction,
+  requestPosRedelivery as requestPosRedeliveryAction,
+} from '@/lib/pos/actions';
 
 interface Props {
   unit: UnitWithShelves;
@@ -62,6 +66,69 @@ export function ShelvesClient({
   const [picker, setPicker] = useState<PickerTarget>(null);
   const [toast, setToast] = useState<Toast>(null);
   const [posDialogOpen, setPosDialogOpen] = useState(false);
+  const [pendingFlags, setPendingFlags] = useState<
+    Array<{ posSlotId: string; label: string }>
+  >([]);
+  const [pendingPanelOpen, setPendingPanelOpen] = useState(false);
+  const [submittingBulk, setSubmittingBulk] = useState(false);
+
+  const pendingFlagIds = useMemo(
+    () => new Set(pendingFlags.map((f) => f.posSlotId)),
+    [pendingFlags]
+  );
+
+  const onTogglePosFlag = useCallback(
+    (posSlotId: string, label: string) => {
+      setPendingFlags((prev) => {
+        const exists = prev.some((f) => f.posSlotId === posSlotId);
+        if (exists) return prev.filter((f) => f.posSlotId !== posSlotId);
+        return [...prev, { posSlotId, label }];
+      });
+    },
+    []
+  );
+
+  const submitBulkRedelivery = useCallback(async () => {
+    if (pendingFlags.length === 0) return;
+    setSubmittingBulk(true);
+    try {
+      // 1) Record each flag as a fresh MISSING issue.
+      for (const f of pendingFlags) {
+        const res = await reportPosIssueAction({
+          siteId: unit.site_id,
+          unitId: unit.id,
+          siteUnitId: unit.id,
+          unitTypePosSlotId: f.posSlotId,
+          reason: 'MISSING',
+          notes: null,
+        });
+        if (!res.ok) {
+          setToast({ kind: 'error', message: res.message });
+          setSubmittingBulk(false);
+          return;
+        }
+      }
+      // 2) Roll all open issues on this site into a single redelivery quote.
+      const q = await requestPosRedeliveryAction({ siteId: unit.site_id });
+      if (!q.ok) {
+        setToast({ kind: 'error', message: q.message });
+        setSubmittingBulk(false);
+        return;
+      }
+      setPendingFlags([]);
+      setPendingPanelOpen(false);
+      window.location.assign(
+        `/sites/${unit.site_id}/quotes/${q.data.quoteRef}`
+      );
+    } catch (err) {
+      setToast({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Submit failed',
+      });
+    } finally {
+      setSubmittingBulk(false);
+    }
+  }, [pendingFlags, unit.id, unit.site_id]);
 
   const openPosIssueCount = useMemo(
     () =>
@@ -563,8 +630,10 @@ export function ShelvesClient({
           canEdit={canEdit}
           selectedSlotId={selectedSlotId}
           totalSlotWidthByShelf={totalSlotWidthByShelf}
+          pendingFlagIds={pendingFlagIds}
           onSelectSlot={setSelectedSlotId}
           onAddSlot={onAddSlot}
+          onTogglePosFlag={onTogglePosFlag}
         />
         <SlotInspector
           unitLabel={unit.label}
@@ -640,6 +709,188 @@ export function ShelvesClient({
         existingIssues={posIssues}
         canRequestRedelivery={canRequestRedelivery}
       />
+
+      {pendingFlags.length > 0 && (
+        <div
+          style={{
+            position: 'fixed',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            bottom: 22,
+            zIndex: 70,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: 0,
+            minWidth: 360,
+            maxWidth: 520,
+            background: 'var(--ml-surface-panel)',
+            border: '0.5px solid var(--ml-border-default)',
+            borderRadius: 'var(--ml-radius-lg)',
+            boxShadow: '0 18px 40px rgba(65, 64, 66, 0.22)',
+            overflow: 'hidden',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setPendingPanelOpen((v) => !v)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '10px 16px',
+              background: 'transparent',
+              border: 0,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+              }}
+            >
+              <span
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 999,
+                  background: 'var(--ml-action-primary)',
+                  color: '#FFFFFF',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {pendingFlags.length}
+              </span>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: 'var(--ml-text-primary)',
+                }}
+              >
+                POS flagged for redelivery
+              </span>
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--ml-text-muted)' }}>
+              {pendingPanelOpen ? 'Hide' : 'Review'}
+            </span>
+          </button>
+
+          {pendingPanelOpen && (
+            <>
+              <ul
+                style={{
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: '0 8px 8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  maxHeight: 260,
+                  overflowY: 'auto',
+                  borderTop: '0.5px solid var(--ml-border-default)',
+                }}
+              >
+                {pendingFlags.map((f) => (
+                  <li
+                    key={f.posSlotId}
+                    style={{
+                      padding: '8px 10px',
+                      background: 'var(--ml-off-white)',
+                      borderRadius: 'var(--ml-radius-md)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 10,
+                      fontSize: 12,
+                      color: 'var(--ml-text-primary)',
+                    }}
+                  >
+                    <span>{f.label}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onTogglePosFlag(f.posSlotId, f.label)
+                      }
+                      aria-label="Remove from bulk order"
+                      style={{
+                        background: 'transparent',
+                        border: 0,
+                        color: 'var(--ml-text-muted)',
+                        fontSize: 14,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {canRequestRedelivery && (
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    borderTop: '0.5px solid var(--ml-border-default)',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: 8,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setPendingFlags([])}
+                    disabled={submittingBulk}
+                    style={{
+                      height: 32,
+                      padding: '0 12px',
+                      background: 'transparent',
+                      color: 'var(--ml-text-muted)',
+                      border: '0.5px solid var(--ml-border-default)',
+                      borderRadius: 'var(--ml-radius-md)',
+                      fontFamily: 'inherit',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitBulkRedelivery}
+                    disabled={submittingBulk}
+                    style={{
+                      height: 32,
+                      padding: '0 16px',
+                      background: 'var(--ml-action-primary)',
+                      color: '#FFFFFF',
+                      border: 0,
+                      borderRadius: 'var(--ml-radius-md)',
+                      fontFamily: 'inherit',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: submittingBulk ? 'wait' : 'pointer',
+                      opacity: submittingBulk ? 0.7 : 1,
+                    }}
+                  >
+                    {submittingBulk
+                      ? 'Submitting…'
+                      : `Bulk order ${pendingFlags.length} POS`}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {toast && (
         <div

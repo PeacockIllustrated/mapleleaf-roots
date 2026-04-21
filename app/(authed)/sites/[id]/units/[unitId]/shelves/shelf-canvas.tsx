@@ -16,8 +16,11 @@ interface Props {
   canEdit: boolean;
   selectedSlotId: string | null;
   totalSlotWidthByShelf: Map<string, number>;
+  /** Ids of POS positions the user has flagged for redelivery in this session. */
+  pendingFlagIds: Set<string>;
   onSelectSlot: (slotId: string | null) => void;
   onAddSlot: (shelfId: string) => void;
+  onTogglePosFlag: (posSlotId: string, label: string) => void;
 }
 
 type ViewBox = { x: number; y: number; w: number; h: number };
@@ -73,8 +76,10 @@ export function ShelfCanvas({
   canEdit,
   selectedSlotId,
   totalSlotWidthByShelf,
+  pendingFlagIds,
   onSelectSlot,
   onAddSlot,
+  onTogglePosFlag,
 }: Props) {
   const promoById = useMemo(() => {
     const m = new Map<string, PromoSectionSummary>();
@@ -352,6 +357,8 @@ export function ShelfCanvas({
           unitTypeName={unit.unit_type_name}
           posSlots={headerPosSlots}
           promo={unitPromo}
+          flaggedIds={pendingFlagIds}
+          onToggleFlag={onTogglePosFlag}
         />
 
         {layout.rows.map(
@@ -423,6 +430,15 @@ export function ShelfCanvas({
                   hasProducts={shelf.slots.some(
                     (s) => s.assignment?.main || s.assignment?.sub_a || s.assignment?.sub_b
                   )}
+                  posSlotForStrip={
+                    unit.pos_slots.find(
+                      (p) =>
+                        p.position_label ===
+                        `SHELF_${shelf.shelf_order}`
+                    ) ?? null
+                  }
+                  flaggedIds={pendingFlagIds}
+                  onToggleFlag={onTogglePosFlag}
                 />
 
                 {/* Shelf plate */}
@@ -614,12 +630,16 @@ function HeaderZone({
   unitTypeName,
   posSlots,
   promo,
+  flaggedIds,
+  onToggleFlag,
 }: {
   widthMm: number;
   unitLabel: string;
   unitTypeName: string;
   posSlots: UnitPosSlot[];
   promo: PromoSectionSummary | null;
+  flaggedIds: Set<string>;
+  onToggleFlag: (id: string, label: string) => void;
 }) {
   const titleStripMm = 48;
   const frameTop = titleStripMm + 20;
@@ -691,59 +711,28 @@ function HeaderZone({
         ry={3}
       />
 
-      {/* The poster placeholder */}
-      <g>
-        <rect
-          x={paperX}
-          y={paperY}
-          width={paperW}
-          height={paperH}
-          fill={promo?.hex_colour ?? '#FFFFFF'}
-          stroke="#414042"
-          strokeWidth={1.4}
-          rx={2}
-          ry={2}
-        />
-        {promo && (
-          <rect
-            x={paperX}
-            y={paperY}
-            width={paperW}
-            height={paperH}
-            fill="#FFFFFF"
-            opacity={0.72}
-            rx={2}
-            ry={2}
-          />
-        )}
-        <text
-          x={paperX + paperW / 2}
-          y={paperY + paperH / 2 + 2}
-          fontSize={Math.max(14, Math.min(34, paperH * 0.3))}
-          fontFamily="Poppins, system-ui, sans-serif"
-          fontWeight={700}
-          letterSpacing={1.2}
-          fill={promo ? '#414042' : '#B7B7B7'}
-          textAnchor="middle"
-        >
-          {headerSlot
-            ? headerSlot.pos_slot_type.display_name.toUpperCase()
-            : 'HEADER POSTER'}
-        </text>
-        {headerSlot && (
-          <text
-            x={paperX + paperW / 2}
-            y={paperY + paperH - 12}
-            fontSize={Math.max(9, Math.min(12, paperH * 0.12))}
-            fontFamily="ui-monospace, Menlo, monospace"
-            fill="#757578"
-            textAnchor="middle"
-          >
-            {headerSlot.pos_slot_type.width_mm}×{headerSlot.pos_slot_type.height_mm} mm ·{' '}
-            {headerSlot.pos_slot_type.default_material.toLowerCase().replace(/_/g, ' ')}
-          </text>
-        )}
-      </g>
+      {/* The POS poster — promo-coloured background, decorative band on
+          the left, subtle repeating "SALE" chevron pattern, and a big
+          headline reading the promo section name. This is a stand-in for
+          the real printed artwork until campaign uploads arrive. */}
+      <PosPoster
+        x={paperX}
+        y={paperY}
+        width={paperW}
+        height={paperH}
+        promo={promo}
+        headerSlot={headerSlot}
+        flagged={!!headerSlot && flaggedIds.has(headerSlot.id)}
+        onToggleFlag={
+          headerSlot
+            ? () =>
+                onToggleFlag(
+                  headerSlot.id,
+                  `${headerSlot.pos_slot_type.display_name} (top header)`
+                )
+            : undefined
+        }
+      />
 
       {/* Divider between header and first slot zone */}
       <line
@@ -754,6 +743,170 @@ function HeaderZone({
         stroke="rgba(65, 64, 66, 0.3)"
         strokeWidth={1}
       />
+    </g>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// POS poster — brand-coloured printed artwork placeholder with hover flag
+// ---------------------------------------------------------------------------
+
+function PosPoster({
+  x,
+  y,
+  width,
+  height,
+  promo,
+  headerSlot,
+  flagged,
+  onToggleFlag,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  promo: PromoSectionSummary | null;
+  headerSlot: UnitPosSlot | null;
+  flagged: boolean;
+  onToggleFlag?: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  const bg = promo?.hex_colour ?? '#FAF8F4';
+  const accent = '#E12828';
+  const stripeW = Math.max(12, width * 0.04);
+  const headline = promo
+    ? promo.display_name.toUpperCase()
+    : headerSlot
+    ? headerSlot.pos_slot_type.display_name.toUpperCase()
+    : 'HEADER POSTER';
+
+  return (
+    <g
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {/* Paper background in the promo colour */}
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill={bg}
+        stroke="#414042"
+        strokeWidth={1.4}
+        rx={3}
+        ry={3}
+      />
+
+      {/* Printed-artwork decoration — left accent stripe + diagonal pattern */}
+      <rect
+        x={x}
+        y={y}
+        width={stripeW}
+        height={height}
+        fill={accent}
+        rx={3}
+        ry={3}
+      />
+      <g opacity={0.22}>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <line
+            key={i}
+            x1={x + stripeW + i * (width / 6)}
+            y1={y}
+            x2={x + stripeW + i * (width / 6) - height * 0.6}
+            y2={y + height}
+            stroke="#FFFFFF"
+            strokeWidth={Math.max(2, width * 0.012)}
+          />
+        ))}
+      </g>
+
+      {/* Big headline — promo section / POS slot */}
+      <text
+        x={x + stripeW + 18}
+        y={y + height / 2 + height * 0.04}
+        fontSize={Math.max(18, Math.min(56, height * 0.45))}
+        fontFamily="Poppins, system-ui, sans-serif"
+        fontWeight={900}
+        letterSpacing={1.8}
+        fill="#FFFFFF"
+      >
+        {headline}
+      </text>
+
+      {/* Small caption — POS size + material, like a print-brief summary */}
+      {headerSlot && (
+        <text
+          x={x + stripeW + 18}
+          y={y + height - 14}
+          fontSize={Math.max(10, Math.min(14, height * 0.11))}
+          fontFamily="ui-monospace, Menlo, monospace"
+          fill="rgba(255, 255, 255, 0.85)"
+        >
+          {headerSlot.pos_slot_type.width_mm}×{headerSlot.pos_slot_type.height_mm} mm ·{' '}
+          {headerSlot.pos_slot_type.default_material.toLowerCase().replace(/_/g, ' ')}
+        </text>
+      )}
+
+      {/* Hover flag icon — absolute top-right */}
+      {onToggleFlag && (hover || flagged) && (
+        <FlagBadge
+          cx={x + width - 20}
+          cy={y + 20}
+          flagged={flagged}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFlag();
+          }}
+        />
+      )}
+    </g>
+  );
+}
+
+function FlagBadge({
+  cx,
+  cy,
+  flagged,
+  onClick,
+}: {
+  cx: number;
+  cy: number;
+  flagged: boolean;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  const r = 14;
+  const fill = flagged ? '#E12828' : '#FFFFFF';
+  const stroke = flagged ? '#E12828' : '#414042';
+  const textColor = flagged ? '#FFFFFF' : '#414042';
+  return (
+    <g
+      style={{ cursor: 'pointer' }}
+      onClick={onClick}
+      role="button"
+      aria-label={flagged ? 'Unflag POS' : 'Flag POS for redelivery'}
+    >
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={1.5}
+      />
+      <text
+        x={cx}
+        y={cy + 5}
+        fontSize={16}
+        fontFamily="Poppins, system-ui, sans-serif"
+        fontWeight={700}
+        fill={textColor}
+        textAnchor="middle"
+        pointerEvents="none"
+      >
+        ⚑
+      </text>
     </g>
   );
 }
@@ -770,6 +923,9 @@ function ShelfEdge({
   promoHex,
   shelfLabel,
   hasProducts,
+  posSlotForStrip,
+  flaggedIds,
+  onToggleFlag,
 }: {
   x: number;
   y: number;
@@ -778,18 +934,29 @@ function ShelfEdge({
   promoHex: string | null;
   shelfLabel: string;
   hasProducts: boolean;
+  posSlotForStrip: UnitPosSlot | null;
+  flaggedIds: Set<string>;
+  onToggleFlag: (id: string, label: string) => void;
 }) {
+  const [hover, setHover] = useState(false);
+  const hasPromo = !!promoHex;
   const barFill = promoHex ?? '#ECE9E2';
+  const flagged = posSlotForStrip
+    ? flaggedIds.has(posSlotForStrip.id)
+    : false;
+
+  // Text colour — on coloured strips use pure white for strongest contrast;
+  // on the neutral fallback, stay charcoal.
+  const onBrand = hasPromo;
+  const textFill = onBrand ? '#FFFFFF' : '#414042';
+
   return (
-    <g>
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        fill={barFill}
-      />
-      {/* Subtle top + bottom highlight so it reads as a strip */}
+    <g
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <rect x={x} y={y} width={width} height={height} fill={barFill} />
+      {/* Strip highlights (top/bottom hairlines) */}
       <rect x={x} y={y} width={width} height={1.2} fill="rgba(0, 0, 0, 0.15)" />
       <rect
         x={x}
@@ -798,34 +965,68 @@ function ShelfEdge({
         height={1}
         fill="rgba(255, 255, 255, 0.22)"
       />
-      {/* Inline price-card labels: bite-sized reminders the shelf edge is live */}
+      {/* Decorative artwork band — subtle diagonal stripes to signal this
+         is live printed real estate, not a blank gap. */}
+      {hasPromo && (
+        <g opacity={0.18}>
+          {Array.from({ length: Math.ceil(width / 120) }).map((_, i) => (
+            <line
+              key={i}
+              x1={x + i * 120}
+              y1={y}
+              x2={x + i * 120 + height * 0.6}
+              y2={y + height}
+              stroke="#FFFFFF"
+              strokeWidth={Math.max(2, height * 0.08)}
+            />
+          ))}
+        </g>
+      )}
+      {/* Price-card labels */}
       {hasProducts && (
         <>
           <text
             x={x + 10}
             y={y + height / 2 + 5}
-            fontSize={14}
+            fontSize={Math.max(12, Math.min(16, height * 0.42))}
             fontFamily="Poppins, system-ui, sans-serif"
             fontWeight={700}
             letterSpacing={1.6}
-            fill={promoHex ? '#414042' : '#9A9A9A'}
+            fill={textFill}
           >
             SHELF {shelfLabel}
           </text>
           <text
-            x={x + width - 10}
+            x={x + width - 40}
             y={y + height / 2 + 5}
-            fontSize={11}
+            fontSize={Math.max(10, Math.min(13, height * 0.32))}
             fontFamily="Poppins, system-ui, sans-serif"
             fontWeight={500}
             letterSpacing={1.1}
             textAnchor="end"
-            fill={promoHex ? '#414042' : '#9A9A9A'}
-            opacity={0.82}
+            fill={textFill}
+            opacity={0.85}
           >
-            PRICE STRIP
+            {posSlotForStrip
+              ? posSlotForStrip.pos_slot_type.display_name.toUpperCase()
+              : 'PRICE STRIP'}
           </text>
         </>
+      )}
+      {/* Hover flag icon — right edge of the strip */}
+      {posSlotForStrip && (hover || flagged) && (
+        <FlagBadge
+          cx={x + width - 18}
+          cy={y + height / 2}
+          flagged={flagged}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFlag(
+              posSlotForStrip.id,
+              `${posSlotForStrip.pos_slot_type.display_name} · shelf ${shelfLabel}`
+            );
+          }}
+        />
       )}
     </g>
   );
