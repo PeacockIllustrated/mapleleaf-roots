@@ -19,6 +19,8 @@ import { createClient } from '@supabase/supabase-js';
 import { createGunzip } from 'node:zlib';
 import { createInterface } from 'node:readline';
 import { Readable } from 'node:stream';
+import { createReadStream, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   FACTS_FAMILY,
   USER_AGENT,
@@ -67,23 +69,34 @@ async function seedSource(source: FactsFamilySource): Promise<void> {
 
   const runId = run?.id as string | undefined;
 
-  console.log(`[${prefix}] fetching ${source.dumpUrl}`);
+  // If SEED_DUMP_DIR is set and contains {key}.jsonl.gz, stream it from
+  // disk — CI pre-downloads the dumps with curl (more resilient than
+  // Node's 10-second fetch connect timeout). Otherwise fall back to
+  // fetching the URL directly (fine for local dev with a quick CDN).
+  const localDir = process.env.SEED_DUMP_DIR;
+  const localPath = localDir ? join(localDir, `${source.key}.jsonl.gz`) : null;
 
-  const resp = await fetch(source.dumpUrl, {
-    headers: { 'User-Agent': USER_AGENT },
-  });
-  if (!resp.ok || !resp.body) {
-    const msg = `dump fetch failed: HTTP ${resp.status}`;
-    await finishRun(runId, 'FAILED', 0, 0, msg);
-    throw new Error(`[${prefix}] ${msg}`);
+  let gunzipped: NodeJS.ReadableStream;
+
+  if (localPath && existsSync(localPath)) {
+    console.log(`[${prefix}] streaming ${localPath}`);
+    gunzipped = createReadStream(localPath).pipe(createGunzip());
+  } else {
+    console.log(`[${prefix}] fetching ${source.dumpUrl}`);
+    const resp = await fetch(source.dumpUrl, {
+      headers: { 'User-Agent': USER_AGENT },
+    });
+    if (!resp.ok || !resp.body) {
+      const msg = `dump fetch failed: HTTP ${resp.status}`;
+      await finishRun(runId, 'FAILED', 0, 0, msg);
+      throw new Error(`[${prefix}] ${msg}`);
+    }
+    const nodeStream = Readable.fromWeb(
+      resp.body as unknown as import('node:stream/web').ReadableStream
+    );
+    gunzipped = nodeStream.pipe(createGunzip());
   }
 
-  // Node fetch returns a Web ReadableStream — bridge to Node stream so
-  // we can pipe through zlib.
-  const nodeStream = Readable.fromWeb(
-    resp.body as unknown as import('node:stream/web').ReadableStream
-  );
-  const gunzipped = nodeStream.pipe(createGunzip());
   const rl = createInterface({ input: gunzipped, crlfDelay: Infinity });
 
   let read = 0;

@@ -42,6 +42,38 @@ jobs:
         if: ${{ (github.event.inputs.mode || 'delta') == 'delta' }}
         run: pnpm products:nightly:ci
 
+      # For the seed, curl the dumps to /tmp first — more resilient than
+      # Node's 10-second fetch connect timeout when OFF's CDN is slow.
+      # curl retries, resumes, and hands us a clean .gz we can stream.
+      - name: Download Facts-family dumps
+        if: ${{ github.event.inputs.mode == 'seed' }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dumps
+          curl -L --fail --retry 5 --retry-connrefused --retry-delay 10 \
+               --connect-timeout 60 --max-time 3600 \
+               -A 'Mapleleaf-Roots/1.0 seed fetch' \
+               -o /tmp/dumps/off.jsonl.gz \
+               https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz
+          curl -L --fail --retry 5 --retry-connrefused --retry-delay 10 \
+               --connect-timeout 60 --max-time 900 \
+               -A 'Mapleleaf-Roots/1.0 seed fetch' \
+               -o /tmp/dumps/obf.jsonl.gz \
+               https://static.openbeautyfacts.org/data/openbeautyfacts-products.jsonl.gz
+          curl -L --fail --retry 5 --retry-connrefused --retry-delay 10 \
+               --connect-timeout 60 --max-time 900 \
+               -A 'Mapleleaf-Roots/1.0 seed fetch' \
+               -o /tmp/dumps/opf.jsonl.gz \
+               https://static.openproductsfacts.org/data/openproductsfacts-products.jsonl.gz
+          curl -L --fail --retry 5 --retry-connrefused --retry-delay 10 \
+               --connect-timeout 60 --max-time 900 \
+               -A 'Mapleleaf-Roots/1.0 seed fetch' \
+               -o /tmp/dumps/opff.jsonl.gz \
+               https://static.openpetfoodfacts.org/data/openpetfoodfacts-products.jsonl.gz
+          ls -lh /tmp/dumps
+
       - name: Full seed from dumps
         if: ${{ github.event.inputs.mode == 'seed' }}
+        env:
+          SEED_DUMP_DIR: /tmp/dumps
         run: pnpm products:seed:ci
