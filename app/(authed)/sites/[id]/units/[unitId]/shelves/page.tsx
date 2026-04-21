@@ -48,6 +48,7 @@ type RawUnit = {
         depth_mm: number | null;
         is_base_shelf: boolean;
         promo_section_id: string | null;
+        clearance_locked: boolean;
         slots: Array<{
           id: string;
           site_unit_shelf_id: string;
@@ -97,7 +98,7 @@ export default async function ShelvesPage({ params }: Props) {
        ),
        shelves:site_unit_shelves (
          id, shelf_order, clearance_mm, depth_mm, is_base_shelf,
-         promo_section_id,
+         promo_section_id, clearance_locked,
          slots:site_unit_slots (
            id, site_unit_shelf_id, slot_order, width_mm, facing_count,
            stack_count, currently_stocking,
@@ -169,6 +170,7 @@ export default async function ShelvesPage({ params }: Props) {
         depth_mm: s.depth_mm,
         is_base_shelf: s.is_base_shelf,
         promo_section_id: s.promo_section_id,
+        clearance_locked: s.clearance_locked ?? false,
         slots,
       };
     });

@@ -230,11 +230,18 @@ export async function resizeShelfClearance(
 
   const { data: target, error: targetErr } = await supabase
     .from('site_unit_shelves')
-    .select('id, site_unit_id, shelf_order, clearance_mm')
+    .select('id, site_unit_id, shelf_order, clearance_mm, clearance_locked')
     .eq('id', shelfId)
     .single();
   if (targetErr || !target) {
     return { ok: false, message: targetErr?.message ?? 'Shelf not found' };
+  }
+
+  if (target.clearance_locked === true) {
+    return {
+      ok: false,
+      message: 'This shelf is locked. Unlock it before resizing.',
+    };
   }
 
   const newTarget = (target.clearance_mm as number) + deltaMm;
@@ -247,7 +254,7 @@ export async function resizeShelfClearance(
 
   const { data: siblings, error: sibErr } = await supabase
     .from('site_unit_shelves')
-    .select('id, shelf_order, clearance_mm')
+    .select('id, shelf_order, clearance_mm, clearance_locked')
     .eq('site_unit_id', target.site_unit_id)
     .order('shelf_order');
   if (sibErr) {
@@ -258,8 +265,11 @@ export async function resizeShelfClearance(
     id: string;
     shelf_order: number;
     clearance_mm: number;
+    clearance_locked: boolean;
   };
-  const all = (siblings ?? []) as Sib[];
+  // Locked shelves can't donate — they're held at their configured height
+  // deliberately. Filter them out of the candidate pool up front.
+  const all = ((siblings ?? []) as Sib[]).filter((s) => !s.clearance_locked);
 
   // Preferred donor order: immediately below → immediately above → others,
   // largest-clearance-first so we don't starve tight shelves.
@@ -284,7 +294,7 @@ export async function resizeShelfClearance(
     return {
       ok: false,
       message:
-        'No other shelf can absorb this change. Delete a product or pick a different shelf.',
+        'No unlocked shelf can absorb this change. Unlock a neighbour or pick a different shelf.',
     };
   }
 
@@ -540,4 +550,41 @@ export async function assignSlotProducts(
 
   revalidatePath(`/sites/${v.siteId}/units/${v.unitId}/shelves`);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Shelf clearance lock — once a site manager has dialled in a shelf to the
+// exact right height (e.g. coffee station with tall cups), they can lock it
+// so later adjustments to other shelves won't borrow from this one.
+// ---------------------------------------------------------------------------
+
+const setShelfLockSchema = z.object({
+  siteId: z.string().uuid(),
+  unitId: z.string().uuid(),
+  shelfId: z.string().uuid(),
+  locked: z.boolean(),
+});
+
+export async function setShelfLock(
+  input: unknown
+): Promise<ShelfActionResult<{ shelfId: string; locked: boolean }>> {
+  await requireRole(WRITE_ROLES);
+  const parsed = setShelfLockSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message ?? 'Bad input',
+    };
+  }
+  const { siteId, unitId, shelfId, locked } = parsed.data;
+
+  const supabase = await createServerClient();
+  const { error } = await supabase
+    .from('site_unit_shelves')
+    .update({ clearance_locked: locked })
+    .eq('id', shelfId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/sites/${siteId}/units/${unitId}/shelves`);
+  return { ok: true, data: { shelfId, locked } };
 }
