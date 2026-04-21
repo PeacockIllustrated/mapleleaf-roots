@@ -273,7 +273,10 @@ export default async function ShelvesPage({ params }: Props) {
     .order('sort_order');
   const promoSections = (promoRows ?? []) as PromoSectionSummary[];
 
-  // Products — the picker's pool.
+  // Products — a small alphabetical starter set for the picker's empty
+  // state. The catalogue grows to 150k+ rows once the Facts-family sync
+  // lands, so shipping all of them to the client would crash the page.
+  // Deeper searches go through the `searchProducts` server action.
   const { data: productRows } = await supabase
     .from('products')
     .select(
@@ -284,7 +287,8 @@ export default async function ShelvesPage({ params }: Props) {
     )
     .eq('is_active', true)
     .order('brand')
-    .order('name');
+    .order('name')
+    .limit(200);
   const products = (productRows ?? []) as ProductSummary[];
 
   const canEdit =
