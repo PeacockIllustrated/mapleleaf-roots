@@ -1,9 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ProductSummary, ShelfRow } from '@/lib/shelf/types';
+import { searchProducts } from '@/lib/products/actions';
 
 interface Props {
+  /**
+   * A small alphabetical starter set (≤200 rows) shipped from the server
+   * component. Used as an initial browse list and as a fallback if the
+   * search action errors. Live queries go through `searchProducts`.
+   */
   products: ProductSummary[];
   targetShelf: ShelfRow | null;
   mode: 'add' | 'assign';
@@ -17,6 +23,16 @@ const kindLabels: Record<Props['kind'], string> = {
   main: 'Main product',
   sub_a: 'Substitute A',
   sub_b: 'Substitute B',
+};
+
+const SEARCH_DEBOUNCE_MS = 180;
+const RESULT_CAP = 60;
+
+type SearchState = {
+  status: 'idle' | 'loading' | 'done' | 'error';
+  items: ProductSummary[];
+  total: number | null;
+  errorMsg: string | null;
 };
 
 export function ProductPicker({
@@ -33,9 +49,13 @@ export function ProductPicker({
     'ALL' | 'AMBIENT' | 'CHILLED' | 'FROZEN'
   >('ALL');
   const [fitOnly, setFitOnly] = useState(false);
+  const [search, setSearch] = useState<SearchState>({
+    status: 'idle',
+    items: [],
+    total: null,
+    errorMsg: null,
+  });
 
-  // If the shelf has a clearance limit, products with height_mm > clearance
-  // are flagged as over-height.
   const shelfClearance = targetShelf?.clearance_mm ?? null;
 
   useEffect(() => {
@@ -46,8 +66,55 @@ export function ProductPicker({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+  // Debounced server search — only fires when the user has typed at
+  // least two characters, so early keystrokes don't slam the DB.
+  const reqIdRef = useRef(0);
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setSearch({ status: 'idle', items: [], total: null, errorMsg: null });
+      return;
+    }
+    setSearch((s) => ({ ...s, status: 'loading', errorMsg: null }));
+
+    const myId = ++reqIdRef.current;
+    const timer = setTimeout(async () => {
+      const res = await searchProducts({
+        query: q,
+        categoryId: filterCategoryId ?? null,
+        temperatureZone: zoneFilter === 'ALL' ? null : zoneFilter,
+        limit: RESULT_CAP,
+      });
+      if (reqIdRef.current !== myId) return; // stale response
+      if (res.ok) {
+        setSearch({
+          status: 'done',
+          items: res.data.products,
+          total: res.data.total,
+          errorMsg: null,
+        });
+      } else {
+        setSearch({
+          status: 'error',
+          items: [],
+          total: null,
+          errorMsg: res.message,
+        });
+      }
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [query, filterCategoryId, zoneFilter]);
+
+  // What gets shown in the grid. Three modes:
+  //   1. Live query (≥2 chars): server-side `searchProducts` results.
+  //   2. Category filter only: filter the starter set by category.
+  //   3. Neither: show a "search to find products" empty state — the
+  //      starter 200 rows get rendered below as a "while you decide"
+  //      browse list, filtered by zone/fit client-side.
+  const usingSearch = query.trim().length >= 2;
+
+  const browseList = useMemo(() => {
     return products.filter((p) => {
       if (filterCategoryId && p.category_id !== filterCategoryId) return false;
       if (zoneFilter !== 'ALL' && p.temperature_zone !== zoneFilter)
@@ -59,14 +126,16 @@ export function ProductPicker({
         p.height_mm > shelfClearance
       )
         return false;
-      if (!q) return true;
-      return (
-        p.name.toLowerCase().includes(q) ||
-        (p.brand ?? '').toLowerCase().includes(q) ||
-        (p.gtin ?? '').includes(q)
-      );
+      return true;
     });
-  }, [products, query, zoneFilter, fitOnly, shelfClearance, filterCategoryId]);
+  }, [products, filterCategoryId, zoneFilter, fitOnly, shelfClearance]);
+
+  const visible = usingSearch ? search.items : browseList;
+  const resultTotalLabel = usingSearch
+    ? search.total != null
+      ? `${Math.min(search.items.length, search.total)} of ${search.total}`
+      : `${search.items.length}`
+    : `${browseList.length} starter · search for more`;
 
   return (
     <div
@@ -159,7 +228,7 @@ export function ProductPicker({
 
           <input
             type="search"
-            placeholder="Search by name, brand, or GTIN…"
+            placeholder="Search 150k+ products by name, brand, or GTIN…"
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -175,7 +244,14 @@ export function ProductPicker({
             }}
           />
 
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
             {(['ALL', 'AMBIENT', 'CHILLED', 'FROZEN'] as const).map((z) => (
               <button
                 key={z}
@@ -192,8 +268,7 @@ export function ProductPicker({
                       : '0.5px solid var(--ml-border-default)',
                   background:
                     zoneFilter === z ? 'var(--ml-charcoal)' : 'transparent',
-                  color:
-                    zoneFilter === z ? '#FFFFFF' : 'var(--ml-charcoal)',
+                  color: zoneFilter === z ? '#FFFFFF' : 'var(--ml-charcoal)',
                   cursor: 'pointer',
                   letterSpacing: '0.04em',
                   textTransform: 'uppercase',
@@ -229,7 +304,7 @@ export function ProductPicker({
                 color: 'var(--ml-text-muted)',
               }}
             >
-              {filtered.length} of {products.length}
+              {search.status === 'loading' ? 'Searching…' : resultTotalLabel}
             </span>
           </div>
         </header>
@@ -245,20 +320,29 @@ export function ProductPicker({
             background: 'var(--ml-off-white)',
           }}
         >
-          {filtered.length === 0 ? (
-            <div
-              style={{
-                gridColumn: '1 / -1',
-                padding: 32,
-                textAlign: 'center',
-                fontSize: 13,
-                color: 'var(--ml-text-muted)',
-              }}
-            >
-              No products match those filters.
-            </div>
+          {search.status === 'error' ? (
+            <EmptyState
+              title="Search failed"
+              body={search.errorMsg ?? 'Try again.'}
+              tone="error"
+            />
+          ) : usingSearch && visible.length === 0 && search.status !== 'loading' ? (
+            <EmptyState
+              title="No products match"
+              body="Try a different search term, or drop the zone filter."
+            />
+          ) : !usingSearch && query.trim().length === 1 ? (
+            <EmptyState
+              title="Keep typing…"
+              body="At least two characters to search the full catalogue."
+            />
+          ) : !usingSearch && !filterCategoryId && products.length === 0 ? (
+            <EmptyState
+              title="Catalogue is empty"
+              body="No products have been synced yet. Ask HQ to trigger the nightly sync."
+            />
           ) : (
-            filtered.map((p) => {
+            visible.slice(0, RESULT_CAP).map((p) => {
               const overHeight =
                 shelfClearance != null &&
                 p.height_mm != null &&
@@ -303,7 +387,14 @@ export function ProductPicker({
                   >
                     {p.brand ?? '—'}
                   </span>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 6,
+                      flexWrap: 'wrap',
+                      marginTop: 4,
+                    }}
+                  >
                     {p.width_mm && (
                       <Chip
                         label={`${p.width_mm} × ${p.height_mm} × ${p.depth_mm} mm`}
@@ -318,6 +409,24 @@ export function ProductPicker({
               );
             })
           )}
+
+          {usingSearch &&
+            search.total != null &&
+            search.total > search.items.length && (
+              <div
+                style={{
+                  gridColumn: '1 / -1',
+                  padding: '10px 12px',
+                  fontSize: 11,
+                  color: 'var(--ml-text-muted)',
+                  fontStyle: 'italic',
+                  textAlign: 'center',
+                }}
+              >
+                Showing the first {search.items.length} of {search.total}{' '}
+                matches. Refine your search to narrow further.
+              </div>
+            )}
         </div>
 
         <footer
@@ -343,13 +452,51 @@ export function ProductPicker({
               textDecoration: 'underline',
             }}
           >
-            {mode === 'add' ? 'Add slot without a product' : 'Clear this assignment'}
+            {mode === 'add'
+              ? 'Add slot without a product'
+              : 'Clear this assignment'}
           </button>
           <span style={{ fontSize: 11, color: 'var(--ml-text-muted)' }}>
             Esc to close
           </span>
         </footer>
       </div>
+    </div>
+  );
+}
+
+function EmptyState({
+  title,
+  body,
+  tone = 'default',
+}: {
+  title: string;
+  body: string;
+  tone?: 'default' | 'error';
+}) {
+  return (
+    <div
+      style={{
+        gridColumn: '1 / -1',
+        padding: 32,
+        textAlign: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+      }}
+    >
+      <span
+        style={{
+          fontSize: 13,
+          fontWeight: 500,
+          color: tone === 'error' ? 'var(--ml-red)' : 'var(--ml-text-primary)',
+        }}
+      >
+        {title}
+      </span>
+      <span style={{ fontSize: 12, color: 'var(--ml-text-muted)' }}>
+        {body}
+      </span>
     </div>
   );
 }
