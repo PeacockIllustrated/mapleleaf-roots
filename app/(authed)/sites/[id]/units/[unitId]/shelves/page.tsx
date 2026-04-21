@@ -250,6 +250,23 @@ export default async function ShelvesPage({ params }: Props) {
     profile.role === 'HQ_ADMIN' ||
     profile.role === 'AREA_MANAGER' ||
     profile.role === 'SITE_MANAGER';
+  const canRequestRedelivery = canEdit;
+
+  const { data: posIssuesRaw } = await supabase
+    .from('pos_material_requests')
+    .select(
+      'id, unit_type_pos_slot_id, reason, notes, status, reported_at'
+    )
+    .eq('site_unit_id', unitId)
+    .order('reported_at', { ascending: false });
+  const posIssues = (posIssuesRaw ?? []) as Array<{
+    id: string;
+    unit_type_pos_slot_id: string;
+    reason: string;
+    notes: string | null;
+    status: string;
+    reported_at: string;
+  }>;
 
   return (
     <ShelvesClient
@@ -257,6 +274,8 @@ export default async function ShelvesPage({ params }: Props) {
       promoSections={promoSections}
       products={products}
       canEdit={canEdit}
+      canRequestRedelivery={canRequestRedelivery}
+      posIssues={posIssues}
     />
   );
 }

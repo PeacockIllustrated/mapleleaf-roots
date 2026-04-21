@@ -23,12 +23,15 @@ import {
 import { ShelfCanvas } from './shelf-canvas';
 import { SlotInspector } from './slot-inspector';
 import { ProductPicker } from './product-picker';
+import { PosIssuesDialog, type PosIssue } from './pos-issues-dialog';
 
 interface Props {
   unit: UnitWithShelves;
   promoSections: PromoSectionSummary[];
   products: ProductSummary[];
   canEdit: boolean;
+  canRequestRedelivery: boolean;
+  posIssues: PosIssue[];
 }
 
 type PickerTarget =
@@ -53,11 +56,22 @@ export function ShelvesClient({
   promoSections,
   products,
   canEdit,
+  canRequestRedelivery,
+  posIssues,
 }: Props) {
   const [unit, setUnit] = useState<UnitWithShelves>(initialUnit);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [picker, setPicker] = useState<PickerTarget>(null);
   const [toast, setToast] = useState<Toast>(null);
+  const [posDialogOpen, setPosDialogOpen] = useState(false);
+
+  const openPosIssueCount = useMemo(
+    () =>
+      posIssues.filter(
+        (i) => i.status === 'REPORTED' || i.status === 'ACKNOWLEDGED'
+      ).length,
+    [posIssues]
+  );
 
   const selectedSlot: ShelfSlot | null = useMemo(() => {
     if (!selectedSlotId) return null;
@@ -438,36 +452,94 @@ export function ShelvesClient({
         minHeight: 620,
       }}
     >
-      <header style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <Link
-          href={`/sites/${unit.site_id}/planogram`}
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: 16,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <Link
+            href={`/sites/${unit.site_id}/planogram`}
+            style={{
+              fontSize: 12,
+              color: 'var(--ml-text-muted)',
+              textDecoration: 'none',
+              letterSpacing: '0.02em',
+            }}
+          >
+            ← Back to planogram
+          </Link>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
+              color: 'var(--ml-text-primary)',
+            }}
+          >
+            Shelves · {unit.label}
+          </h1>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--ml-text-muted)' }}>
+            {unit.unit_type_name} · {unit.width_mm} × {unit.height_mm} mm ·{' '}
+            {unit.shelves.length} shelves.{' '}
+            {canEdit
+              ? 'Click an empty shelf to add a slot.'
+              : 'Read-only for your role.'}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setPosDialogOpen(true)}
           style={{
+            height: 36,
+            padding: '0 14px',
+            background:
+              openPosIssueCount > 0
+                ? 'var(--ml-action-primary)'
+                : 'transparent',
+            color:
+              openPosIssueCount > 0 ? '#FFFFFF' : 'var(--ml-charcoal)',
+            border:
+              openPosIssueCount > 0
+                ? 0
+                : '1px solid var(--ml-charcoal)',
+            borderRadius: 'var(--ml-radius-md)',
+            fontFamily: 'inherit',
             fontSize: 12,
-            color: 'var(--ml-text-muted)',
-            textDecoration: 'none',
-            letterSpacing: '0.02em',
+            fontWeight: 500,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
           }}
         >
-          ← Back to planogram
-        </Link>
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 22,
-            fontWeight: 700,
-            letterSpacing: '-0.01em',
-            color: 'var(--ml-text-primary)',
-          }}
-        >
-          Shelves · {unit.label}
-        </h1>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--ml-text-muted)' }}>
-          {unit.unit_type_name} · {unit.width_mm} × {unit.height_mm} mm ·{' '}
-          {unit.shelves.length} shelves.{' '}
-          {canEdit
-            ? 'Click an empty shelf to add a slot.'
-            : 'Read-only for your role.'}
-        </p>
+          POS issues
+          {openPosIssueCount > 0 && (
+            <span
+              style={{
+                minWidth: 20,
+                height: 20,
+                padding: '0 6px',
+                borderRadius: 9999,
+                background: 'rgba(255, 255, 255, 0.22)',
+                color: '#FFFFFF',
+                fontSize: 10,
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {openPosIssueCount}
+            </span>
+          )}
+        </button>
       </header>
 
       <div
@@ -549,6 +621,17 @@ export function ShelvesClient({
             />
           );
         })()}
+
+      <PosIssuesDialog
+        open={posDialogOpen}
+        onClose={() => setPosDialogOpen(false)}
+        siteId={unit.site_id}
+        unitId={unit.id}
+        siteUnitId={unit.id}
+        posSlots={unit.pos_slots}
+        existingIssues={posIssues}
+        canRequestRedelivery={canRequestRedelivery}
+      />
 
       {toast && (
         <div
