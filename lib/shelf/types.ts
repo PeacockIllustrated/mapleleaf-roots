@@ -72,6 +72,7 @@ export interface ShelfRow {
   depth_mm: number | null;
   is_base_shelf: boolean;
   promo_section_id: string | null;
+  clearance_locked: boolean;
   slots: ShelfSlot[];
 }
 

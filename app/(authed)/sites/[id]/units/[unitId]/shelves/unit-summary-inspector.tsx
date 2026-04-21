@@ -15,6 +15,7 @@ interface Props {
     notes?: string | null;
   }) => void;
   onAdjustShelfClearance: (shelfId: string, delta: 20 | -20) => void;
+  onToggleShelfLock: (shelfId: string) => void;
 }
 
 /**
@@ -28,6 +29,7 @@ export function UnitSummaryInspector({
   promoSections,
   onUpdate,
   onAdjustShelfClearance,
+  onToggleShelfLock,
 }: Props) {
   const [labelDraft, setLabelDraft] = useState(unit.label);
   const [notesDraft, setNotesDraft] = useState(unit.notes ?? '');
@@ -164,18 +166,24 @@ export function UnitSummaryInspector({
               (acc, sl) => acc + sl.width_mm,
               0
             );
+            const locked = s.clearance_locked;
             return (
               <div
                 key={s.id}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '26px 1fr auto auto',
+                  gridTemplateColumns: '26px 1fr auto auto auto',
                   alignItems: 'center',
-                  gap: 8,
+                  gap: 6,
                   padding: '6px 8px',
-                  background: 'var(--ml-off-white)',
+                  background: locked
+                    ? 'rgba(65, 64, 66, 0.04)'
+                    : 'var(--ml-off-white)',
                   borderRadius: 'var(--ml-radius-sm)',
                   fontSize: 12,
+                  border: locked
+                    ? '0.5px solid rgba(65, 64, 66, 0.22)'
+                    : '0.5px solid transparent',
                 }}
               >
                 <span
@@ -192,18 +200,37 @@ export function UnitSummaryInspector({
                 <span style={{ color: 'var(--ml-text-muted)' }}>
                   {s.clearance_mm} mm high · {s.slots.length} slot
                   {s.slots.length === 1 ? '' : 's'} · {fill}/{unit.width_mm} mm
+                  {locked && (
+                    <span
+                      style={{
+                        marginLeft: 6,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        letterSpacing: '0.06em',
+                        textTransform: 'uppercase',
+                        color: 'var(--ml-charcoal)',
+                      }}
+                    >
+                      · locked
+                    </span>
+                  )}
                 </span>
                 <MiniStep
                   aria="Reduce clearance"
                   label="−"
-                  disabled={!canEdit || s.clearance_mm <= 80}
+                  disabled={!canEdit || locked || s.clearance_mm <= 80}
                   onClick={() => onAdjustShelfClearance(s.id, -20)}
                 />
                 <MiniStep
                   aria="Increase clearance"
                   label="+"
-                  disabled={!canEdit}
+                  disabled={!canEdit || locked}
                   onClick={() => onAdjustShelfClearance(s.id, 20)}
+                />
+                <LockToggle
+                  locked={locked}
+                  disabled={!canEdit}
+                  onClick={() => onToggleShelfLock(s.id)}
                 />
               </div>
             );
@@ -363,6 +390,90 @@ function PromoChip({
         {label}
       </span>
     </button>
+  );
+}
+
+function LockToggle({
+  locked,
+  onClick,
+  disabled,
+}: {
+  locked: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={locked ? 'Unlock shelf height' : 'Lock shelf height'}
+      title={
+        locked
+          ? 'Unlock — allow other adjustments to borrow mm from this shelf'
+          : 'Lock — hold this shelf at its current height'
+      }
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: 26,
+        height: 24,
+        borderRadius: 'var(--ml-radius-sm)',
+        background: locked ? 'var(--ml-charcoal)' : 'var(--ml-surface-panel)',
+        color: locked ? '#FFFFFF' : 'var(--ml-charcoal)',
+        border: locked
+          ? '0.5px solid var(--ml-charcoal)'
+          : '0.5px solid var(--ml-border-default)',
+        fontSize: 12,
+        lineHeight: 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
+        fontFamily: 'inherit',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <LockGlyph open={!locked} />
+    </button>
+  );
+}
+
+function LockGlyph({ open }: { open: boolean }) {
+  // Tiny inline SVG — fewer glyph/emoji rendering quirks than unicode padlocks.
+  return (
+    <svg
+      width="11"
+      height="13"
+      viewBox="0 0 11 13"
+      fill="none"
+      aria-hidden="true"
+    >
+      <rect
+        x="1"
+        y="6"
+        width="9"
+        height="6.5"
+        rx="1"
+        fill="currentColor"
+        opacity="0.9"
+      />
+      {open ? (
+        <path
+          d="M2.4 6 V3.2 a3.1 3.1 0 0 1 6.2 0"
+          stroke="currentColor"
+          strokeWidth="1.1"
+          fill="none"
+          strokeLinecap="round"
+        />
+      ) : (
+        <path
+          d="M2.4 6 V3.2 a3.1 3.1 0 0 1 6.2 0 V6"
+          stroke="currentColor"
+          strokeWidth="1.1"
+          fill="none"
+          strokeLinecap="round"
+        />
+      )}
+    </svg>
   );
 }
 

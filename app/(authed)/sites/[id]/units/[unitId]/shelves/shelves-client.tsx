@@ -17,6 +17,7 @@ import {
   assignSlotProducts,
   spreadShelf as spreadShelfAction,
   resizeShelfClearance as resizeShelfClearanceAction,
+  setShelfLock as setShelfLockAction,
 } from '@/lib/shelf/actions';
 import { updateSiteUnit } from '@/lib/configurator/actions';
 import { ShelfCanvas } from './shelf-canvas';
@@ -353,6 +354,13 @@ export function ShelvesClient({
     async (shelfId: string, delta: 20 | -20) => {
       const shelf = unit.shelves.find((s) => s.id === shelfId);
       if (!shelf) return;
+      if (shelf.clearance_locked) {
+        setToast({
+          kind: 'error',
+          message: 'This shelf is locked. Unlock it first.',
+        });
+        return;
+      }
 
       // The unit's physical height is fixed — resize takes/gives mm from
       // a neighbour shelf so the sum of clearances stays constant.
@@ -378,6 +386,40 @@ export function ShelvesClient({
           return sh;
         }),
       }));
+    },
+    [unit.id, unit.site_id, unit.shelves]
+  );
+
+  const onToggleShelfLock = useCallback(
+    async (shelfId: string) => {
+      const shelf = unit.shelves.find((s) => s.id === shelfId);
+      if (!shelf) return;
+      const nextLocked = !shelf.clearance_locked;
+
+      // Optimistic flip.
+      setUnit((prev) => ({
+        ...prev,
+        shelves: prev.shelves.map((sh) =>
+          sh.id === shelfId ? { ...sh, clearance_locked: nextLocked } : sh
+        ),
+      }));
+
+      const res = await setShelfLockAction({
+        siteId: unit.site_id,
+        unitId: unit.id,
+        shelfId,
+        locked: nextLocked,
+      });
+      if (!res.ok) {
+        // Revert on failure.
+        setUnit((prev) => ({
+          ...prev,
+          shelves: prev.shelves.map((sh) =>
+            sh.id === shelfId ? { ...sh, clearance_locked: !nextLocked } : sh
+          ),
+        }));
+        setToast({ kind: 'error', message: res.message });
+      }
     },
     [unit.id, unit.site_id, unit.shelves]
   );
@@ -717,6 +759,7 @@ export function ShelvesClient({
             promoSections={promoSections}
             onUpdate={onUpdateUnit}
             onAdjustShelfClearance={onAdjustShelfClearance}
+            onToggleShelfLock={onToggleShelfLock}
           />
         )}
       </div>

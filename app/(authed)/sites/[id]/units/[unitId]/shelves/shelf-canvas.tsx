@@ -45,20 +45,25 @@ function easeOutQuint(t: number): number {
   return 1 - Math.pow(1 - t, 5);
 }
 
-const HEADER_MM = 360;
-const PLINTH_MM = 160;
+const TOP_RAIL_MM = 40; // thin internal title rail (unit label + type)
+const PLINTH_MM = 100; // base plinth (internal)
 const SHELF_THICKNESS_MM = 14;
 const SHELF_EDGE_MM = 40; // front price-strip zone below each slot row
 const GUTTER_MM = 90; // left-of-unit for shelf numbers; right-of-unit for budget pill
+const POS_ARM_MM = 80; // vertical arms between unit top and external POS poster
+const POS_MARGIN_MM = 30; // breathing space above the external POS
+const POS_FALLBACK_W_MM = 1000;
+const POS_FALLBACK_H_MM = 250;
 
 /**
  * ShelfCanvas — elevation view of a single unit.
  *
  * Vertical anatomy (top → bottom):
  *
- *   ┌─ HEADER zone ──────────────────────────────────────┐
- *   │   UNIT name band + framed POS poster placeholder   │
- *   ├────────────────────────────────────────────────────┤
+ *   ┌─ EXTERNAL POS poster (on arms, above the unit) ────┐
+ *   │                                                    │
+ *   ├─ arms ─────────────────────────────────────────────┤
+ *   ┌─ Top rail (unit label + type) ─────────────────────┐
  *   │   Shelf N slot zone (products on shelf N)          │
  *   │   Shelf N edge strip (price strip + promo)         │
  *   │   Shelf N plate (charcoal band)                    │
@@ -67,11 +72,12 @@ const GUTTER_MM = 90; // left-of-unit for shelf numbers; right-of-unit for budge
  *   │   Base plinth                                      │
  *   └────────────────────────────────────────────────────┘
  *
- * The unit type's POS positions (HEADER_BOARD_* etc) are rendered as
- * sized rectangles inside the header zone so the user can see the
- * printable real estate. Each shelf's edge strip is tinted by its promo
- * section, giving somewhere for price cards and wobbler design to live
- * visually without cluttering the product zone.
+ * The unit type's POS header slots (HEADER_BOARD_* etc) hang on arms
+ * above the unit, outside the carcass height — that matches how they're
+ * fitted in-store and frees every mm of the unit's internal height for
+ * products. Each shelf's edge strip is tinted by its promo section,
+ * giving somewhere for price cards and wobbler design to live visually
+ * without cluttering the product zone.
  */
 export function ShelfCanvas({
   unit,
@@ -93,7 +99,7 @@ export function ShelfCanvas({
   }, [promoSections]);
 
   const layout = useMemo(() => {
-    let cursor = HEADER_MM;
+    let cursor = TOP_RAIL_MM;
     const rows = unit.shelves.map((s) => {
       const zoneTopY = cursor;
       const zoneBottomY = cursor + s.clearance_mm;
@@ -133,19 +139,34 @@ export function ShelfCanvas({
   const unitPromo =
     (unit.promo_section_id && promoById.get(unit.promo_section_id)) || null;
 
+  // External POS poster sizing — the physical poster goes above the unit,
+  // hanging on arms from the carcass. We fit its real dimensions into a
+  // sensible on-screen rectangle centred above the unit.
+  const headerSlot = headerPosSlots[0] ?? null;
+  const posNativeW = headerSlot?.pos_slot_type.width_mm ?? POS_FALLBACK_W_MM;
+  const posNativeH = headerSlot?.pos_slot_type.height_mm ?? POS_FALLBACK_H_MM;
+  const posMaxW = Math.min(posNativeW, unit.width_mm * 0.9);
+  const posScale = posMaxW / posNativeW;
+  const posPaperW = posNativeW * posScale;
+  const posPaperH = posNativeH * posScale;
+  const posPaperX = (unit.width_mm - posPaperW) / 2;
+  const posPaperY = -(POS_ARM_MM + posPaperH);
+  const viewboxTopY = posPaperY - POS_MARGIN_MM;
+
   // --- Railed zoom/pan -----------------------------------------------------
-  // Overview shows the whole unit. Focusing a shelf animates the SVG viewBox
-  // to frame just that shelf (with a little context above + below). Arrow
-  // keys cycle shelves while focused; Esc / overview button exits.
+  // Overview shows the whole unit + the external POS. Focusing a shelf
+  // animates the SVG viewBox to frame just that shelf (external POS drops
+  // out of view). Arrow keys cycle shelves while focused; Esc / overview
+  // button exits.
 
   const overviewViewBox: ViewBox = useMemo(
     () => ({
       x: -GUTTER_MM,
-      y: -20,
+      y: viewboxTopY,
       w: unit.width_mm + GUTTER_MM * 2,
-      h: unitHeight + 40,
+      h: unitHeight - viewboxTopY + 40,
     }),
-    [unit.width_mm, unitHeight]
+    [unit.width_mm, unitHeight, viewboxTopY]
   );
 
   const shelfViewBoxFor = useCallback(
@@ -344,6 +365,23 @@ export function ShelfCanvas({
           fill="rgba(65, 64, 66, 0.06)"
         />
 
+        {/* External POS header — hangs above the unit on arms, outside the
+            unit's physical height. */}
+        <ExternalPosHeader
+          unitWidthMm={unit.width_mm}
+          paperX={posPaperX}
+          paperY={posPaperY}
+          paperW={posPaperW}
+          paperH={posPaperH}
+          headerSlot={headerSlot}
+          promo={unitPromo}
+          flagged={!!headerSlot && pendingFlagIds.has(headerSlot.id)}
+          artworkSet={!!headerSlot && artworkSetIds.has(headerSlot.id)}
+          canEdit={canEdit}
+          onToggleFlag={onTogglePosFlag}
+          onSetArtwork={onSetPosArtwork}
+        />
+
         {/* Unit frame */}
         <rect
           x={0}
@@ -357,17 +395,11 @@ export function ShelfCanvas({
           ry={4}
         />
 
-        <HeaderZone
+        {/* Top rail — thin internal title band just inside the frame. */}
+        <TopRail
           widthMm={unit.width_mm}
           unitLabel={unit.label}
           unitTypeName={unit.unit_type_name}
-          posSlots={headerPosSlots}
-          promo={unitPromo}
-          flaggedIds={pendingFlagIds}
-          artworkSetIds={artworkSetIds}
-          onToggleFlag={onTogglePosFlag}
-          onSetArtwork={onSetPosArtwork}
-          canEdit={canEdit}
         />
 
         {layout.rows.map(
@@ -649,69 +681,31 @@ function ShelfNumberPill({
 }
 
 // ---------------------------------------------------------------------------
-// Header zone — unit name strip + framed POS poster placeholders
+// Top rail — thin title band at the top of the unit (label + type code)
 // ---------------------------------------------------------------------------
 
-function HeaderZone({
+function TopRail({
   widthMm,
   unitLabel,
   unitTypeName,
-  posSlots,
-  promo,
-  flaggedIds,
-  artworkSetIds,
-  canEdit,
-  onToggleFlag,
-  onSetArtwork,
 }: {
   widthMm: number;
   unitLabel: string;
   unitTypeName: string;
-  posSlots: UnitPosSlot[];
-  promo: PromoSectionSummary | null;
-  flaggedIds: Set<string>;
-  artworkSetIds: Set<string>;
-  canEdit: boolean;
-  onToggleFlag: (id: string, label: string) => void;
-  onSetArtwork: (id: string) => void;
 }) {
-  const titleStripMm = 48;
-  const frameTop = titleStripMm + 20;
-  const frameBottom = HEADER_MM - 24;
-  const frameHeight = frameBottom - frameTop;
-  const frameWidth = widthMm - 60;
-  const frameX = (widthMm - frameWidth) / 2;
-
-  // The first "header-type" POS slot defines the paper size; if missing,
-  // we still draw a sensible placeholder so the zone feels intentional.
-  const headerSlot = posSlots[0] ?? null;
-  const posW = headerSlot?.pos_slot_type.width_mm ?? Math.min(1000, widthMm - 120);
-  const posH = headerSlot?.pos_slot_type.height_mm ?? 250;
-
-  // Fit the paper into the frame.
-  const scale = Math.min(
-    (frameWidth - 20) / posW,
-    (frameHeight - 20) / posH
-  );
-  const paperW = posW * scale;
-  const paperH = posH * scale;
-  const paperX = frameX + (frameWidth - paperW) / 2;
-  const paperY = frameTop + (frameHeight - paperH) / 2;
-
   return (
     <g>
-      {/* Title strip */}
       <rect
         x={0}
         y={0}
         width={widthMm}
-        height={titleStripMm}
+        height={TOP_RAIL_MM}
         fill="#262627"
       />
       <text
         x={18}
-        y={titleStripMm / 2 + 7}
-        fontSize={22}
+        y={TOP_RAIL_MM / 2 + 7}
+        fontSize={20}
         fontFamily="Poppins, system-ui, sans-serif"
         fontWeight={500}
         letterSpacing={1.4}
@@ -721,8 +715,8 @@ function HeaderZone({
       </text>
       <text
         x={widthMm - 18}
-        y={titleStripMm / 2 + 7}
-        fontSize={14}
+        y={TOP_RAIL_MM / 2 + 6}
+        fontSize={13}
         fontFamily="Poppins, system-ui, sans-serif"
         fontWeight={300}
         letterSpacing={2.2}
@@ -731,24 +725,97 @@ function HeaderZone({
       >
         {unitTypeName.toUpperCase()}
       </text>
-
-      {/* POS header frame (the box where the poster hangs) */}
-      <rect
-        x={frameX}
-        y={frameTop}
-        width={frameWidth}
-        height={frameHeight}
-        fill="#FAF8F4"
-        stroke="rgba(65, 64, 66, 0.2)"
+      <line
+        x1={0}
+        x2={widthMm}
+        y1={TOP_RAIL_MM}
+        y2={TOP_RAIL_MM}
+        stroke="rgba(65, 64, 66, 0.3)"
         strokeWidth={1}
-        rx={3}
-        ry={3}
+      />
+    </g>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// External POS header — poster hanging on arms above the unit carcass
+// ---------------------------------------------------------------------------
+
+function ExternalPosHeader({
+  unitWidthMm,
+  paperX,
+  paperY,
+  paperW,
+  paperH,
+  headerSlot,
+  promo,
+  flagged,
+  artworkSet,
+  canEdit,
+  onToggleFlag,
+  onSetArtwork,
+}: {
+  unitWidthMm: number;
+  paperX: number;
+  paperY: number;
+  paperW: number;
+  paperH: number;
+  headerSlot: UnitPosSlot | null;
+  promo: PromoSectionSummary | null;
+  flagged: boolean;
+  artworkSet: boolean;
+  canEdit: boolean;
+  onToggleFlag: (id: string, label: string) => void;
+  onSetArtwork: (id: string) => void;
+}) {
+  // Arms rise from the top of the unit (y=0) up to the bottom of the
+  // poster. They're inset from the unit's edges so they read as brackets
+  // rather than continuations of the carcass.
+  const armInset = Math.max(80, unitWidthMm * 0.12);
+  const armLeftX = armInset;
+  const armRightX = unitWidthMm - armInset;
+  const armTopY = paperY + paperH;
+
+  return (
+    <g>
+      {/* Arms — charcoal posts */}
+      <line
+        x1={armLeftX}
+        x2={armLeftX}
+        y1={0}
+        y2={armTopY}
+        stroke="#414042"
+        strokeWidth={6}
+        strokeLinecap="round"
+      />
+      <line
+        x1={armRightX}
+        x2={armRightX}
+        y1={0}
+        y2={armTopY}
+        stroke="#414042"
+        strokeWidth={6}
+        strokeLinecap="round"
+      />
+      {/* Small brackets where the arms meet the poster */}
+      <rect
+        x={armLeftX - 8}
+        y={armTopY - 4}
+        width={16}
+        height={8}
+        rx={2}
+        fill="#262627"
+      />
+      <rect
+        x={armRightX - 8}
+        y={armTopY - 4}
+        width={16}
+        height={8}
+        rx={2}
+        fill="#262627"
       />
 
-      {/* The POS poster — promo-coloured background, decorative band on
-          the left, subtle repeating "SALE" chevron pattern, and a big
-          headline reading the promo section name. This is a stand-in for
-          the real printed artwork until campaign uploads arrive. */}
+      {/* The POS poster itself */}
       <PosPoster
         x={paperX}
         y={paperY}
@@ -756,8 +823,8 @@ function HeaderZone({
         height={paperH}
         promo={promo}
         headerSlot={headerSlot}
-        flagged={!!headerSlot && flaggedIds.has(headerSlot.id)}
-        artworkSet={!!headerSlot && artworkSetIds.has(headerSlot.id)}
+        flagged={flagged}
+        artworkSet={artworkSet}
         canEdit={canEdit}
         onToggleFlag={
           headerSlot
@@ -771,16 +838,6 @@ function HeaderZone({
         onSetArtwork={
           headerSlot ? () => onSetArtwork(headerSlot.id) : undefined
         }
-      />
-
-      {/* Divider between header and first slot zone */}
-      <line
-        x1={0}
-        x2={widthMm}
-        y1={HEADER_MM}
-        y2={HEADER_MM}
-        stroke="rgba(65, 64, 66, 0.3)"
-        strokeWidth={1}
       />
     </g>
   );
