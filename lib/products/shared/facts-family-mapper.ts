@@ -16,6 +16,21 @@ import {
   isUkMarket,
   mapCountryMarkets,
 } from './normalise';
+import { resolveImageUrls } from './image-url';
+
+/**
+ * Raw image entry from the Facts-family JSONL. The top-level `images`
+ * field is an object keyed by role (`front_en`, `ingredients_en`, `1`,
+ * `2`, …). We only care about the front-image entry — every other role
+ * is uninteresting for the picker.
+ */
+export interface FactsFamilyImageEntry {
+  rev?: number | string;
+  sizes?: Record<string, unknown>;
+  imgid?: number | string;
+  uploaded_t?: number | string;
+  uploader?: string;
+}
 
 /** The subset of Facts-family JSONL fields we read. */
 export interface FactsFamilyRow {
@@ -25,10 +40,15 @@ export interface FactsFamilyRow {
   brands?: string;
   categories_tags?: string[];
   countries_tags?: string[];
+  // API-shape fields — present when fetched via /api/v2/product/{gtin}.
+  // Absent in the JSONL dump.
   image_front_url?: string;
   image_front_small_url?: string;
   image_url?: string;
   image_small_url?: string;
+  // JSONL-shape: lookup of image roles → revision info. Present in the
+  // bulk dump; the API flattens this into the *_url fields above.
+  images?: Record<string, FactsFamilyImageEntry>;
   last_modified_t?: number;
   // Packaging / quantity — only loosely useful today but worth keeping.
   product_quantity?: string | number;
@@ -71,14 +91,15 @@ export function mapFactsRow(
 
   const brand = firstBrand(raw.brands);
   const categoryTags = raw.categories_tags ?? [];
+  const { imageUrl, thumbnailUrl } = resolveImageUrls(raw, dataSource);
 
   return {
     gtin,
     name,
     brand,
     temperature_zone: inferTemperatureZone(categoryTags),
-    image_url: raw.image_front_url ?? raw.image_url ?? null,
-    thumbnail_url: raw.image_front_small_url ?? raw.image_small_url ?? null,
+    image_url: imageUrl,
+    thumbnail_url: thumbnailUrl,
     data_source: dataSource,
     external_ref: raw.code ?? gtin,
     country_markets: markets,
