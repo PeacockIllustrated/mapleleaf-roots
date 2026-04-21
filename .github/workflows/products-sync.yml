@@ -1,0 +1,47 @@
+name: Products — nightly Facts-family delta
+
+on:
+  schedule:
+    # 02:00 UTC (03:00 BST / 02:00 GMT). OFF's dump regenerates around
+    # 00:00 UTC so this gives us a fresh feed to pull deltas against.
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'delta (default) or seed'
+        required: false
+        default: 'delta'
+        type: choice
+        options:
+          - delta
+          - seed
+
+jobs:
+  sync:
+    name: ${{ github.event.inputs.mode || 'delta' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Nightly delta
+        if: ${{ (github.event.inputs.mode || 'delta') == 'delta' }}
+        run: pnpm products:nightly
+
+      - name: Full seed from dumps
+        if: ${{ github.event.inputs.mode == 'seed' }}
+        run: pnpm products:seed
