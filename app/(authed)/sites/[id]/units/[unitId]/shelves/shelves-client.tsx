@@ -18,8 +18,10 @@ import {
   spreadShelf as spreadShelfAction,
   resizeShelfClearance as resizeShelfClearanceAction,
 } from '@/lib/shelf/actions';
+import { updateSiteUnit } from '@/lib/configurator/actions';
 import { ShelfCanvas } from './shelf-canvas';
 import { SlotInspector } from './slot-inspector';
+import { UnitSummaryInspector } from './unit-summary-inspector';
 import { ProductPicker } from './product-picker';
 import { PosIssuesDialog, type PosIssue } from './pos-issues-dialog';
 import {
@@ -428,6 +430,23 @@ export function ShelvesClient({
     [unit.shelves]
   );
 
+  const onUpdateUnit = useCallback(
+    async (patch: {
+      label?: string;
+      promo_section_id?: string | null;
+      notes?: string | null;
+    }) => {
+      setUnit((prev) => ({ ...prev, ...patch }));
+      const res = await updateSiteUnit({
+        siteId: unit.site_id,
+        unitId: unit.id,
+        ...patch,
+      });
+      if (!res.ok) setToast({ kind: 'error', message: res.message });
+    },
+    [unit.id, unit.site_id]
+  );
+
   const onUpdateSlot = useCallback(
     async (
       slotId: string,
@@ -665,45 +684,39 @@ export function ShelvesClient({
           onTogglePosFlag={onTogglePosFlag}
           onSetPosArtwork={onSetArtworkTarget}
         />
-        <SlotInspector
-          unitLabel={unit.label}
-          shelf={selectedShelf}
-          slot={selectedSlot}
-          canEdit={canEdit}
-          promoSections={promoSections}
-          unitWidthMm={unit.width_mm}
-          usedOnShelfMm={
-            selectedShelf
-              ? totalSlotWidthByShelf.get(selectedShelf.id) ?? 0
-              : 0
-          }
-          totalShelves={unit.shelves.length}
-          onUpdate={(patch) =>
-            selectedSlot ? onUpdateSlot(selectedSlot.id, patch) : undefined
-          }
-          onAdjustFacings={(delta) =>
-            selectedSlot ? onAdjustFacings(selectedSlot.id, delta) : undefined
-          }
-          onAdjustStack={(delta) =>
-            selectedSlot ? onAdjustStack(selectedSlot.id, delta) : undefined
-          }
-          onAdjustShelfClearance={(delta) =>
-            selectedShelf
-              ? onAdjustShelfClearance(selectedShelf.id, delta)
-              : undefined
-          }
-          onSpreadShelf={() =>
-            selectedShelf ? onSpreadShelf(selectedShelf.id) : undefined
-          }
-          onSuggestSimilar={() =>
-            selectedSlot ? onSuggestSimilar(selectedSlot.id) : undefined
-          }
-          onDelete={() =>
-            selectedSlot ? onDeleteSlot(selectedSlot.id) : undefined
-          }
-          onPickProduct={openPicker}
-          onClose={() => setSelectedSlotId(null)}
-        />
+        {selectedSlot && selectedShelf ? (
+          <SlotInspector
+            unitLabel={unit.label}
+            shelf={selectedShelf}
+            slot={selectedSlot}
+            canEdit={canEdit}
+            promoSections={promoSections}
+            unitWidthMm={unit.width_mm}
+            usedOnShelfMm={
+              totalSlotWidthByShelf.get(selectedShelf.id) ?? 0
+            }
+            totalShelves={unit.shelves.length}
+            onUpdate={(patch) => onUpdateSlot(selectedSlot.id, patch)}
+            onAdjustFacings={(delta) => onAdjustFacings(selectedSlot.id, delta)}
+            onAdjustStack={(delta) => onAdjustStack(selectedSlot.id, delta)}
+            onAdjustShelfClearance={(delta) =>
+              onAdjustShelfClearance(selectedShelf.id, delta)
+            }
+            onSpreadShelf={() => onSpreadShelf(selectedShelf.id)}
+            onSuggestSimilar={() => onSuggestSimilar(selectedSlot.id)}
+            onDelete={() => onDeleteSlot(selectedSlot.id)}
+            onPickProduct={openPicker}
+            onClose={() => setSelectedSlotId(null)}
+          />
+        ) : (
+          <UnitSummaryInspector
+            unit={unit}
+            canEdit={canEdit}
+            promoSections={promoSections}
+            onUpdate={onUpdateUnit}
+            onAdjustShelfClearance={onAdjustShelfClearance}
+          />
+        )}
       </div>
 
       {picker &&

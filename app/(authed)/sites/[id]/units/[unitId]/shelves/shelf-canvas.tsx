@@ -49,7 +49,7 @@ const HEADER_MM = 360;
 const PLINTH_MM = 160;
 const SHELF_THICKNESS_MM = 14;
 const SHELF_EDGE_MM = 40; // front price-strip zone below each slot row
-const GUTTER_MM = 60; // left-of-unit for shelf numbers; right-of-unit for budget pill
+const GUTTER_MM = 90; // left-of-unit for shelf numbers; right-of-unit for budget pill
 
 /**
  * ShelfCanvas — elevation view of a single unit.
@@ -469,44 +469,26 @@ export function ShelfCanvas({
                   fill="rgba(255, 255, 255, 0.12)"
                 />
 
-                {/* Shelf index in the left gutter — clickable to focus
-                    that shelf (reversed label; bottom = 1). */}
-                <g
-                  style={{ cursor: 'pointer' }}
-                  onClick={(e) => {
-                    e.stopPropagation();
+                {/* Shelf index in the left gutter — clickable focus pill. */}
+                <ShelfNumberPill
+                  cx={-26}
+                  cy={(zoneTopY + zoneBottomY) / 2}
+                  label={displayShelfLabel(
+                    shelf.shelf_order,
+                    unit.shelves.length
+                  )}
+                  active={
+                    focusedIndex !== null &&
+                    layout.rows[focusedIndex]?.shelf.id === shelf.id
+                  }
+                  onClick={() => {
                     const idx = layout.rows.findIndex(
                       (r) => r.shelf.id === shelf.id
                     );
                     if (idx < 0) return;
                     setFocusedIndex((prev) => (prev === idx ? null : idx));
                   }}
-                >
-                  {/* Invisible generous hit-target around the number. */}
-                  <rect
-                    x={-42}
-                    y={zoneTopY}
-                    width={40}
-                    height={zoneBottomY - zoneTopY}
-                    fill="transparent"
-                  />
-                  <text
-                    x={-14}
-                    y={(zoneTopY + zoneBottomY) / 2 + 5}
-                    fontSize={16}
-                    fontFamily="Poppins, system-ui, sans-serif"
-                    fontWeight={500}
-                    textAnchor="end"
-                    fill={
-                      focusedIndex !== null &&
-                      layout.rows[focusedIndex]?.shelf.id === shelf.id
-                        ? '#E12828'
-                        : '#9A9A9A'
-                    }
-                  >
-                    {displayShelfLabel(shelf.shelf_order, unit.shelves.length)}
-                  </text>
-                </g>
+                />
 
                 {/* Shelf budget pill in the right gutter */}
                 <ShelfBudgetPill
@@ -537,46 +519,36 @@ export function ShelfCanvas({
         />
       </svg>
 
-      {/* Navigation rail — shelf chips for zoom-to-shelf + overview toggle */}
-      <nav
-        aria-label="Shelf navigation"
-        style={{
-          position: 'absolute',
-          left: 10,
-          top: 72,
-          bottom: 24,
-          width: 36,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'stretch',
-          gap: 6,
-          padding: 4,
-          background: 'rgba(255, 255, 255, 0.92)',
-          border: '0.5px solid var(--ml-border-default)',
-          borderRadius: 999,
-          boxShadow: '0 6px 18px rgba(65, 64, 66, 0.1)',
-          overflow: 'hidden',
-        }}
-      >
-        <RailButton
-          label="All"
-          active={focusedIndex === null}
+      {/* Overview escape hatch — only shown when a shelf is focused.
+          Otherwise the shelf numbers in the gutter are the primary nav. */}
+      {focusedIndex !== null && (
+        <button
+          type="button"
           onClick={() => setFocusedIndex(null)}
-          ariaLabel="Show full unit"
-        />
-        {unit.shelves.map((s, i) => {
-          const label = displayShelfLabel(s.shelf_order, unit.shelves.length);
-          return (
-            <RailButton
-              key={s.id}
-              label={String(label)}
-              active={focusedIndex === i}
-              onClick={() => setFocusedIndex(i)}
-              ariaLabel={`Focus shelf ${label}`}
-            />
-          );
-        })}
-      </nav>
+          style={{
+            position: 'absolute',
+            left: 14,
+            top: 14,
+            height: 30,
+            padding: '0 14px',
+            background: 'rgba(255, 255, 255, 0.95)',
+            border: '0.5px solid var(--ml-border-default)',
+            borderRadius: 999,
+            fontFamily: 'inherit',
+            fontSize: 11,
+            fontWeight: 500,
+            letterSpacing: '0.04em',
+            color: 'var(--ml-text-primary)',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            boxShadow: '0 6px 18px rgba(65, 64, 66, 0.1)',
+          }}
+        >
+          ← Overview
+        </button>
+      )}
 
       {/* Inline help — only when focused */}
       {focusedIndex !== null && (
@@ -620,41 +592,59 @@ export function ShelfCanvas({
   );
 }
 
-function RailButton({
+// ---------------------------------------------------------------------------
+// Shelf number pill — in-canvas focus affordance
+// ---------------------------------------------------------------------------
+
+function ShelfNumberPill({
+  cx,
+  cy,
   label,
   active,
-  ariaLabel,
   onClick,
 }: {
-  label: string;
+  cx: number;
+  cy: number;
+  label: number;
   active: boolean;
-  ariaLabel: string;
   onClick: () => void;
 }) {
+  const [hover, setHover] = useState(false);
+  const r = 28;
+  const fill = active ? '#E12828' : hover ? '#414042' : '#FFFFFF';
+  const stroke = active ? '#E12828' : hover ? '#414042' : 'rgba(65, 64, 66, 0.25)';
+  const textColor = active || hover ? '#FFFFFF' : '#414042';
   return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      aria-pressed={active}
-      onClick={onClick}
-      style={{
-        height: 28,
-        width: '100%',
-        flexShrink: 0,
-        borderRadius: 999,
-        border: '0.5px solid transparent',
-        background: active ? '#414042' : 'transparent',
-        color: active ? '#FFFFFF' : '#414042',
-        fontFamily: 'Poppins, system-ui, sans-serif',
-        fontWeight: 500,
-        fontSize: 11,
-        cursor: 'pointer',
-        transition:
-          'background var(--ml-motion-fast) var(--ml-ease-out), color var(--ml-motion-fast) var(--ml-ease-out)',
+    <g
+      style={{ cursor: 'pointer' }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
       }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
     >
-      {label}
-    </button>
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={1.5}
+      />
+      <text
+        x={cx}
+        y={cy + 10}
+        fontSize={28}
+        fontFamily="Poppins, system-ui, sans-serif"
+        fontWeight={500}
+        fill={textColor}
+        textAnchor="middle"
+        pointerEvents="none"
+      >
+        {label}
+      </text>
+    </g>
   );
 }
 

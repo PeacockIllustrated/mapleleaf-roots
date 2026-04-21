@@ -23,6 +23,7 @@ type RawUnit = {
   promo_section_id: string | null;
   site_planogram_id: string;
   unit_type_id: string;
+  notes: string | null;
   unit_type:
     | {
         code: string;
@@ -90,7 +91,7 @@ export default async function ShelvesPage({ params }: Props) {
   const { data: raw } = await supabase
     .from('site_units')
     .select(
-      `id, label, promo_section_id, site_planogram_id, unit_type_id,
+      `id, label, promo_section_id, site_planogram_id, unit_type_id, notes,
        unit_type:unit_types (
          code, display_name, width_mm, depth_mm, height_mm
        ),
@@ -220,6 +221,7 @@ export default async function ShelvesPage({ params }: Props) {
     depth_mm: ut.depth_mm,
     height_mm: ut.height_mm,
     promo_section_id: unit.promo_section_id,
+    notes: unit.notes,
     shelves,
     pos_slots: posSlots,
   };

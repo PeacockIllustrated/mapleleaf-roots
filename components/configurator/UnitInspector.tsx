@@ -803,7 +803,8 @@ function PosRow({ slot }: { slot: UnitTypePosSlotRef }) {
 // ---------------------------------------------------------------------------
 
 const panelStyle: React.CSSProperties = {
-  width: 320,
+  minWidth: 320,
+  maxWidth: 400,
   flexShrink: 0,
   background: 'var(--ml-surface-panel)',
   border: '0.5px solid var(--ml-border-default)',

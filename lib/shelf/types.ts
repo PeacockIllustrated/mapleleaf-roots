@@ -100,6 +100,7 @@ export interface UnitWithShelves {
   depth_mm: number;
   height_mm: number;
   promo_section_id: string | null;
+  notes: string | null;
   shelves: ShelfRow[];
   pos_slots: UnitPosSlot[];
 }

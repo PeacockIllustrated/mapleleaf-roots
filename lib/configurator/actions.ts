@@ -37,6 +37,7 @@ const updateSchema = z.object({
   floor_y: z.number().int().optional(),
   rotation_degrees: rotationSchema.optional(),
   promo_section_id: z.string().uuid().nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
 });
 
 const deleteSchema = z.object({
