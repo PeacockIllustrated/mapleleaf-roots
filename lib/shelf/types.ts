@@ -35,6 +35,18 @@ export function facingHeightMm(p: ProductSummary | null): number | null {
   return p.shipper_height_mm ?? p.height_mm ?? null;
 }
 
+/**
+ * Display label for a shelf — numbered from the bottom up (1 = floor).
+ * Data still stores shelf_order 1..N from top down; this helper is a
+ * presentation-only inversion so users see what they'd see in-store.
+ */
+export function displayShelfLabel(
+  shelfOrder: number,
+  totalShelves: number
+): number {
+  return Math.max(1, totalShelves - shelfOrder + 1);
+}
+
 export interface SlotAssignment {
   id: string;
   main: ProductSummary | null;

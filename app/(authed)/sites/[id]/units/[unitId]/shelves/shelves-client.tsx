@@ -571,6 +571,7 @@ export function ShelvesClient({
               ? totalSlotWidthByShelf.get(selectedShelf.id) ?? 0
               : 0
           }
+          totalShelves={unit.shelves.length}
           onUpdate={(patch) =>
             selectedSlot ? onUpdateSlot(selectedSlot.id, patch) : undefined
           }

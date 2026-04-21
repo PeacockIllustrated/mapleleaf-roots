@@ -8,6 +8,7 @@ import type {
   UnitPosSlot,
   UnitWithShelves,
 } from '@/lib/shelf/types';
+import { displayShelfLabel } from '@/lib/shelf/types';
 
 interface Props {
   unit: UnitWithShelves;
@@ -31,6 +32,11 @@ function lerp(a: number, b: number, t: number): number {
 
 function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+/** Quick-start, gentle-landing curve — feels responsive on click. */
+function easeOutQuint(t: number): number {
+  return 1 - Math.pow(1 - t, 5);
 }
 
 const HEADER_MM = 360;
@@ -134,12 +140,17 @@ export function ShelfCanvas({
       const row = layout.rows[index];
       if (!row) return null;
       const { zoneTopY, plateBottomY } = row;
-      const contextY = 60;
+      // The shelf itself spans zoneTopY → plateBottomY. We pad the viewBox
+      // generously above and below so the shelf sits squarely in the middle
+      // of its frame rather than squashed against the top (the SVG uses
+      // xMidYMid meet, so any extra viewBox height reads as centred padding).
+      const shelfHeight = plateBottomY - zoneTopY;
+      const padding = Math.max(60, shelfHeight * 0.55);
       return {
-        x: -GUTTER_MM,
-        y: Math.max(0, zoneTopY - contextY),
-        w: unit.width_mm + GUTTER_MM * 2,
-        h: plateBottomY - zoneTopY + contextY * 2,
+        x: -GUTTER_MM / 2,
+        y: zoneTopY - padding,
+        w: unit.width_mm + GUTTER_MM,
+        h: shelfHeight + padding * 2,
       };
     },
     [layout.rows, unit.width_mm]
@@ -161,13 +172,20 @@ export function ShelfCanvas({
         ? overviewViewBox
         : shelfViewBoxFor(focusedIndex) ?? overviewViewBox;
     const from = viewBox;
-    const duration = 320;
+    // Overview <-> shelf gets a longer, gentler curve; shelf <-> shelf
+    // hops are shorter so wheel nav feels responsive.
+    const isHop =
+      focusedIndex !== null &&
+      from.w === target.w &&
+      from.h === target.h;
+    const duration = isHop ? 260 : 420;
+    const ease = isHop ? easeOutQuint : easeInOut;
     const start = performance.now();
     if (animRef.current !== null) cancelAnimationFrame(animRef.current);
 
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / duration);
-      const e = easeInOut(t);
+      const e = ease(t);
       setViewBox({
         x: lerp(from.x, target.x, e),
         y: lerp(from.y, target.y, e),
@@ -213,6 +231,32 @@ export function ShelfCanvas({
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, [focusedIndex, unit.shelves.length]);
+
+  // Mouse-wheel shelf navigation — only while a shelf is focused. Throttled
+  // so a trackpad flick doesn't skip past the end. Wheel up → shelf above
+  // (lower index in data-order, a physically higher shelf on screen).
+  const wheelLockRef = useRef<number>(0);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      if (focusedIndex === null) return;
+      if (Math.abs(e.deltaY) < 4) return;
+      e.preventDefault();
+      const now = performance.now();
+      if (now - wheelLockRef.current < 280) return;
+      wheelLockRef.current = now;
+      const dir = e.deltaY > 0 ? 1 : -1;
+      setFocusedIndex((i) => {
+        if (i === null) return null;
+        const next = i + dir;
+        if (next < 0 || next > unit.shelves.length - 1) return i;
+        return next;
+      });
+    }
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
   }, [focusedIndex, unit.shelves.length]);
 
   return (
@@ -370,7 +414,9 @@ export function ShelfCanvas({
                   width={unit.width_mm}
                   height={zoneBottomY - edgeTopY}
                   promoHex={shelfPromo?.hex_colour ?? null}
-                  shelfLabel={String(shelf.shelf_order)}
+                  shelfLabel={String(
+                    displayShelfLabel(shelf.shelf_order, unit.shelves.length)
+                  )}
                   hasProducts={shelf.slots.some(
                     (s) => s.assignment?.main || s.assignment?.sub_a || s.assignment?.sub_b
                   )}
@@ -392,7 +438,7 @@ export function ShelfCanvas({
                   fill="rgba(255, 255, 255, 0.12)"
                 />
 
-                {/* Shelf index in the left gutter */}
+                {/* Shelf index in the left gutter (reversed — bottom = 1) */}
                 <text
                   x={-14}
                   y={(zoneTopY + zoneBottomY) / 2 + 5}
@@ -402,7 +448,7 @@ export function ShelfCanvas({
                   textAnchor="end"
                   fill="#9A9A9A"
                 >
-                  {shelf.shelf_order}
+                  {displayShelfLabel(shelf.shelf_order, unit.shelves.length)}
                 </text>
 
                 {/* Shelf budget pill in the right gutter */}
@@ -461,15 +507,18 @@ export function ShelfCanvas({
           onClick={() => setFocusedIndex(null)}
           ariaLabel="Show full unit"
         />
-        {unit.shelves.map((s, i) => (
-          <RailButton
-            key={s.id}
-            label={String(s.shelf_order)}
-            active={focusedIndex === i}
-            onClick={() => setFocusedIndex(i)}
-            ariaLabel={`Focus shelf ${s.shelf_order}`}
-          />
-        ))}
+        {unit.shelves.map((s, i) => {
+          const label = displayShelfLabel(s.shelf_order, unit.shelves.length);
+          return (
+            <RailButton
+              key={s.id}
+              label={String(label)}
+              active={focusedIndex === i}
+              onClick={() => setFocusedIndex(i)}
+              ariaLabel={`Focus shelf ${label}`}
+            />
+          );
+        })}
       </nav>
 
       {/* Inline help — only when focused */}
@@ -498,10 +547,16 @@ export function ShelfCanvas({
               fontWeight: 500,
             }}
           >
-            Shelf {unit.shelves[focusedIndex]?.shelf_order ?? ''}
+            Shelf{' '}
+            {unit.shelves[focusedIndex]
+              ? displayShelfLabel(
+                  unit.shelves[focusedIndex].shelf_order,
+                  unit.shelves.length
+                )
+              : ''}
           </span>
           <span style={{ opacity: 0.6 }}>·</span>
-          <span>↑ ↓ switch · Esc overview</span>
+          <span>↑ ↓ or scroll · Esc overview</span>
         </div>
       )}
     </div>

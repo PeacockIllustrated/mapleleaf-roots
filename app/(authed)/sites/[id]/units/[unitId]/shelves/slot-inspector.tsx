@@ -8,7 +8,7 @@ import type {
   ShelfSlot,
   SlotStockingState,
 } from '@/lib/shelf/types';
-import { facingHeightMm } from '@/lib/shelf/types';
+import { facingHeightMm, displayShelfLabel } from '@/lib/shelf/types';
 
 interface Props {
   unitLabel: string;
@@ -18,6 +18,7 @@ interface Props {
   promoSections: PromoSectionSummary[];
   unitWidthMm: number;
   usedOnShelfMm: number;
+  totalShelves: number;
   onUpdate:
     | ((patch: {
         widthMm?: number;
@@ -59,6 +60,7 @@ export function SlotInspector({
   canEdit,
   unitWidthMm,
   usedOnShelfMm,
+  totalShelves,
   onUpdate,
   onAdjustFacings,
   onAdjustStack,
@@ -118,7 +120,8 @@ export function SlotInspector({
     <aside style={panel}>
       <div style={headerBlock}>
         <span style={sectionLabel}>
-          Slot #{slot.slot_order} · shelf {shelf.shelf_order}
+          Slot #{slot.slot_order} · shelf{' '}
+          {displayShelfLabel(shelf.shelf_order, totalShelves)}
         </span>
         <span
           style={{
@@ -247,7 +250,9 @@ export function SlotInspector({
           })}
         </div>
 
-        <SectionHeader title={`Shelf ${shelf.shelf_order}`} />
+        <SectionHeader
+          title={`Shelf ${displayShelfLabel(shelf.shelf_order, totalShelves)}`}
+        />
 
         <Field label="Shelf clearance">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
