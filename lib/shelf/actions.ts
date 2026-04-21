@@ -190,6 +190,139 @@ export async function updateSlot(
 }
 
 // ---------------------------------------------------------------------------
+// Resize shelf clearance with sibling-borrow — the unit's physical height
+// is fixed, so growing one shelf has to come out of another. We prefer the
+// neighbour below, fall back to the neighbour above, then any other shelf
+// whose clearance can absorb the delta without dropping below MIN.
+// ---------------------------------------------------------------------------
+
+const MIN_CLEARANCE_MM = 80;
+
+const resizeClearanceSchema = z.object({
+  siteId: z.string().uuid(),
+  unitId: z.string().uuid(),
+  shelfId: z.string().uuid(),
+  deltaMm: z
+    .number()
+    .int()
+    .refine((n) => n !== 0, 'Delta must be non-zero')
+    .refine((n) => Math.abs(n) <= 500, 'Step too large'),
+});
+
+export type ResizeShelfResult = ShelfActionResult<{
+  targetId: string;
+  targetClearance: number;
+  donorId: string;
+  donorClearance: number;
+}>;
+
+export async function resizeShelfClearance(
+  input: unknown
+): Promise<ResizeShelfResult> {
+  await requireRole(WRITE_ROLES);
+  const parsed = resizeClearanceSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? 'Bad input' };
+  }
+  const { siteId, unitId, shelfId, deltaMm } = parsed.data;
+
+  const supabase = await createServerClient();
+
+  const { data: target, error: targetErr } = await supabase
+    .from('site_unit_shelves')
+    .select('id, site_unit_id, shelf_order, clearance_mm')
+    .eq('id', shelfId)
+    .single();
+  if (targetErr || !target) {
+    return { ok: false, message: targetErr?.message ?? 'Shelf not found' };
+  }
+
+  const newTarget = (target.clearance_mm as number) + deltaMm;
+  if (newTarget < MIN_CLEARANCE_MM) {
+    return {
+      ok: false,
+      message: `Shelf can't drop below ${MIN_CLEARANCE_MM}mm.`,
+    };
+  }
+
+  const { data: siblings, error: sibErr } = await supabase
+    .from('site_unit_shelves')
+    .select('id, shelf_order, clearance_mm')
+    .eq('site_unit_id', target.site_unit_id)
+    .order('shelf_order');
+  if (sibErr) {
+    return { ok: false, message: sibErr.message };
+  }
+
+  type Sib = {
+    id: string;
+    shelf_order: number;
+    clearance_mm: number;
+  };
+  const all = (siblings ?? []) as Sib[];
+
+  // Preferred donor order: immediately below → immediately above → others,
+  // largest-clearance-first so we don't starve tight shelves.
+  const below = all.find(
+    (s) => s.shelf_order === (target.shelf_order as number) + 1
+  );
+  const above = all.find(
+    (s) => s.shelf_order === (target.shelf_order as number) - 1
+  );
+  const others = all
+    .filter((s) => s.id !== target.id && s.id !== below?.id && s.id !== above?.id)
+    .sort((a, b) => b.clearance_mm - a.clearance_mm);
+
+  const candidates = [below, above, ...others].filter(
+    (x): x is Sib => !!x
+  );
+
+  const donor = candidates.find(
+    (c) => c.clearance_mm - deltaMm >= MIN_CLEARANCE_MM
+  );
+  if (!donor) {
+    return {
+      ok: false,
+      message:
+        'No other shelf can absorb this change. Delete a product or pick a different shelf.',
+    };
+  }
+
+  const donorNew = donor.clearance_mm - deltaMm;
+
+  const { error: t1 } = await supabase
+    .from('site_unit_shelves')
+    .update({ clearance_mm: newTarget })
+    .eq('id', target.id);
+  if (t1) return { ok: false, message: t1.message };
+
+  const { error: t2 } = await supabase
+    .from('site_unit_shelves')
+    .update({ clearance_mm: donorNew })
+    .eq('id', donor.id);
+  if (t2) {
+    // Roll back the target change so we don't leave the unit taller or
+    // shorter than its physical height.
+    await supabase
+      .from('site_unit_shelves')
+      .update({ clearance_mm: target.clearance_mm })
+      .eq('id', target.id);
+    return { ok: false, message: t2.message };
+  }
+
+  revalidatePath(`/sites/${siteId}/units/${unitId}/shelves`);
+  return {
+    ok: true,
+    data: {
+      targetId: target.id as string,
+      targetClearance: newTarget,
+      donorId: donor.id,
+      donorClearance: donorNew,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Spread shelf — fill remaining whitespace by adding facings to existing
 // product-backed slots (round-robin, least-facings-first). Empty placeholder
 // slots are left as-is; the user can manually assign products or widen them.

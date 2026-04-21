@@ -104,7 +104,10 @@ export function ShelfCanvas({
     return { rows, totalUsedMm };
   }, [unit.shelves]);
 
-  const unitHeight = Math.max(unit.height_mm, layout.totalUsedMm);
+  // The unit's physical height is fixed. We use unit.height_mm directly
+  // even if the sum of clearances briefly overflows (caller hands off
+  // redistribution to resizeShelfClearance, so this is rare).
+  const unitHeight = unit.height_mm;
 
   const headerPosSlots = useMemo(
     () =>
@@ -871,28 +874,36 @@ function SlotShape({
     : 'rgba(65, 64, 66, 0.0)';
   const outlineWidth = selected ? 3 : hover ? 1.6 : 0;
 
-  // Product box — slightly warm white so it lifts off a promo tint.
-  const productFill = '#FFFFFF';
-  const innerStroke = promoHex ?? 'rgba(65, 64, 66, 0.22)';
-
   const labelSize = Math.max(12, Math.min(20, facingW / 12));
   const brandSize = Math.max(10, Math.min(13, facingW / 18));
 
-  // Product box occupies the middle-ish portion of the slot zone. When a
-  // stack_count > 1 is set, the box grows vertically up to stack_count ×
-  // per-unit facing height, capped by the shelf clearance.
+  // Product box — as tall as stack_count × facing_height would suggest,
+  // capped by the shelf's available room. When the desired height exceeds
+  // the available room, we flag it as an "over-height" state and render
+  // the boxes in red so the user can decide: remove/restock fewer, or
+  // raise the shelf height.
   const singleFacingHeight =
     product?.shipper_height_mm ?? product?.height_mm ?? null;
   const stack = Math.max(1, slot.stack_count);
-  const productBoxHeight = Math.min(
-    height - 14,
-    singleFacingHeight
-      ? singleFacingHeight * stack
-      : height - 14
-  );
+  const availableHeight = height - 14;
+  const desiredHeight =
+    singleFacingHeight !== null ? singleFacingHeight * stack : null;
+  const overflow =
+    desiredHeight !== null && desiredHeight > availableHeight;
+  const productBoxHeight =
+    desiredHeight !== null
+      ? Math.min(availableHeight, desiredHeight)
+      : availableHeight;
   const productBoxTop = bottomY - 8 - productBoxHeight;
-  const singleRowHeight =
-    productBoxHeight / stack;
+  const singleRowHeight = productBoxHeight / stack;
+
+  // Product box — slightly warm white so it lifts off a promo tint.
+  // When over-height, we switch to a red wash + red outline so the
+  // problem reads instantly without blocking the user from keeping it.
+  const productFill = overflow ? '#FFE9E9' : '#FFFFFF';
+  const innerStroke = overflow
+    ? '#E12828'
+    : promoHex ?? 'rgba(65, 64, 66, 0.22)';
 
   return (
     <g
@@ -1039,12 +1050,38 @@ function SlotShape({
           fontSize={11}
           fontFamily="Poppins, system-ui, sans-serif"
           fontWeight={500}
-          fill="rgba(117, 117, 120, 0.9)"
+          fill={overflow ? '#E12828' : 'rgba(117, 117, 120, 0.9)'}
           textAnchor="end"
           pointerEvents="none"
         >
           {`${facings}w${slot.stack_count > 1 ? ` × ${slot.stack_count}h` : ''}`}
         </text>
+      )}
+
+      {/* Over-height warning ribbon — product box is red, this tag names it */}
+      {overflow && (
+        <g pointerEvents="none">
+          <rect
+            x={x + 6}
+            y={topY + 26}
+            width={Math.min(120, width - 12)}
+            height={18}
+            rx={3}
+            ry={3}
+            fill="#E12828"
+          />
+          <text
+            x={x + 12}
+            y={topY + 39}
+            fontSize={10}
+            fontFamily="Poppins, system-ui, sans-serif"
+            fontWeight={500}
+            letterSpacing={0.6}
+            fill="#FFFFFF"
+          >
+            ⚠ OVER HEIGHT
+          </text>
+        </g>
       )}
     </g>
   );

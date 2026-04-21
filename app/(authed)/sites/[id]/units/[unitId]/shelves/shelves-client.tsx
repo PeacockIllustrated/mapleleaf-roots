@@ -16,10 +16,8 @@ import {
   deleteSlot as deleteSlotAction,
   assignSlotProducts,
   spreadShelf as spreadShelfAction,
+  resizeShelfClearance as resizeShelfClearanceAction,
 } from '@/lib/shelf/actions';
-import {
-  updateShelf as updateShelfAction,
-} from '@/lib/configurator/actions';
 import { ShelfCanvas } from './shelf-canvas';
 import { SlotInspector } from './slot-inspector';
 import { ProductPicker } from './product-picker';
@@ -256,24 +254,33 @@ export function ShelvesClient({
     async (shelfId: string, delta: 20 | -20) => {
       const shelf = unit.shelves.find((s) => s.id === shelfId);
       if (!shelf) return;
-      const next = Math.max(60, shelf.clearance_mm + delta);
-      if (next === shelf.clearance_mm) return;
 
+      // The unit's physical height is fixed — resize takes/gives mm from
+      // a neighbour shelf so the sum of clearances stays constant.
+      const res = await resizeShelfClearanceAction({
+        siteId: unit.site_id,
+        unitId: unit.id,
+        shelfId,
+        deltaMm: delta,
+      });
+      if (!res.ok) {
+        setToast({ kind: 'error', message: res.message });
+        return;
+      }
       setUnit((prev) => ({
         ...prev,
-        shelves: prev.shelves.map((sh) =>
-          sh.id === shelfId ? { ...sh, clearance_mm: next } : sh
-        ),
+        shelves: prev.shelves.map((sh) => {
+          if (sh.id === res.data.targetId) {
+            return { ...sh, clearance_mm: res.data.targetClearance };
+          }
+          if (sh.id === res.data.donorId) {
+            return { ...sh, clearance_mm: res.data.donorClearance };
+          }
+          return sh;
+        }),
       }));
-
-      const res = await updateShelfAction({
-        siteId: unit.site_id,
-        shelfId,
-        clearanceMm: next,
-      });
-      if (!res.ok) setToast({ kind: 'error', message: res.message });
     },
-    [unit.site_id, unit.shelves]
+    [unit.id, unit.site_id, unit.shelves]
   );
 
   const onSpreadShelf = useCallback(
