@@ -12,6 +12,12 @@ const WRITE_ROLES = [
   'EMPLOYEE',
 ] as const;
 
+const ARTWORK_ROLES = [
+  'HQ_ADMIN',
+  'AREA_MANAGER',
+  'SITE_MANAGER',
+] as const;
+
 const REDELIVERY_ROLES = [
   'HQ_ADMIN',
   'AREA_MANAGER',
@@ -72,6 +78,91 @@ export async function reportPosIssue(
 
   revalidatePath(`/sites/${v.siteId}/units/${v.unitId}/shelves`);
   return { ok: true, data: { id: data.id as string } };
+}
+
+// ---------------------------------------------------------------------------
+// Set / clear the artwork assigned to a POS position on a site_unit
+// ---------------------------------------------------------------------------
+
+const setArtworkSchema = z.object({
+  siteId: z.string().uuid(),
+  unitId: z.string().uuid(),
+  siteUnitId: z.string().uuid(),
+  unitTypePosSlotId: z.string().uuid(),
+  artworkUrl: z.string().max(2000).optional().nullable(),
+  notes: z.string().max(2000).optional().nullable(),
+});
+
+export async function setPosArtwork(
+  input: unknown
+): Promise<PosActionResult> {
+  const caller = await requireRole(ARTWORK_ROLES);
+  const parsed = setArtworkSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? 'Bad input' };
+  }
+  const v = parsed.data;
+
+  const supabase = await createServerClient();
+
+  const { data: existing } = await supabase
+    .from('site_unit_pos_artwork')
+    .select('id')
+    .eq('site_unit_id', v.siteUnitId)
+    .eq('unit_type_pos_slot_id', v.unitTypePosSlotId)
+    .maybeSingle();
+
+  const payload = {
+    site_unit_id: v.siteUnitId,
+    unit_type_pos_slot_id: v.unitTypePosSlotId,
+    artwork_url: v.artworkUrl || null,
+    notes: v.notes || null,
+    set_by: caller.id,
+    set_at: new Date().toISOString(),
+  };
+
+  if (existing) {
+    const { error } = await supabase
+      .from('site_unit_pos_artwork')
+      .update(payload)
+      .eq('id', existing.id);
+    if (error) return { ok: false, message: error.message };
+  } else {
+    const { error } = await supabase
+      .from('site_unit_pos_artwork')
+      .insert(payload);
+    if (error) return { ok: false, message: error.message };
+  }
+
+  revalidatePath(`/sites/${v.siteId}/units/${v.unitId}/shelves`);
+  return { ok: true };
+}
+
+const clearArtworkSchema = z.object({
+  siteId: z.string().uuid(),
+  unitId: z.string().uuid(),
+  siteUnitId: z.string().uuid(),
+  unitTypePosSlotId: z.string().uuid(),
+});
+
+export async function clearPosArtwork(
+  input: unknown
+): Promise<PosActionResult> {
+  await requireRole(ARTWORK_ROLES);
+  const parsed = clearArtworkSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: 'Bad input' };
+  const v = parsed.data;
+
+  const supabase = await createServerClient();
+  const { error } = await supabase
+    .from('site_unit_pos_artwork')
+    .delete()
+    .eq('site_unit_id', v.siteUnitId)
+    .eq('unit_type_pos_slot_id', v.unitTypePosSlotId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/sites/${v.siteId}/units/${v.unitId}/shelves`);
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

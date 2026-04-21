@@ -23,6 +23,10 @@ import { SlotInspector } from './slot-inspector';
 import { ProductPicker } from './product-picker';
 import { PosIssuesDialog, type PosIssue } from './pos-issues-dialog';
 import {
+  PosArtworkDialog,
+  type PosArtworkAssignment,
+} from './pos-artwork-dialog';
+import {
   reportPosIssue as reportPosIssueAction,
   requestPosRedelivery as requestPosRedeliveryAction,
 } from '@/lib/pos/actions';
@@ -34,6 +38,7 @@ interface Props {
   canEdit: boolean;
   canRequestRedelivery: boolean;
   posIssues: PosIssue[];
+  posArtwork: PosArtworkAssignment[];
 }
 
 type PickerTarget =
@@ -60,6 +65,7 @@ export function ShelvesClient({
   canEdit,
   canRequestRedelivery,
   posIssues,
+  posArtwork,
 }: Props) {
   const [unit, setUnit] = useState<UnitWithShelves>(initialUnit);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
@@ -75,6 +81,28 @@ export function ShelvesClient({
   const pendingFlagIds = useMemo(
     () => new Set(pendingFlags.map((f) => f.posSlotId)),
     [pendingFlags]
+  );
+
+  const artworkByPosSlot = useMemo(() => {
+    const m = new Map<string, PosArtworkAssignment>();
+    for (const a of posArtwork) m.set(a.unit_type_pos_slot_id, a);
+    return m;
+  }, [posArtwork]);
+  const artworkSetIds = useMemo(
+    () => new Set(posArtwork.map((a) => a.unit_type_pos_slot_id)),
+    [posArtwork]
+  );
+
+  const [artworkTarget, setArtworkTarget] = useState<string | null>(null);
+  const onSetArtworkTarget = useCallback((posSlotId: string) => {
+    setArtworkTarget(posSlotId);
+  }, []);
+  const artworkPosSlot = useMemo(
+    () =>
+      artworkTarget
+        ? unit.pos_slots.find((p) => p.id === artworkTarget) ?? null
+        : null,
+    [artworkTarget, unit.pos_slots]
   );
 
   const onTogglePosFlag = useCallback(
@@ -631,9 +659,11 @@ export function ShelvesClient({
           selectedSlotId={selectedSlotId}
           totalSlotWidthByShelf={totalSlotWidthByShelf}
           pendingFlagIds={pendingFlagIds}
+          artworkSetIds={artworkSetIds}
           onSelectSlot={setSelectedSlotId}
           onAddSlot={onAddSlot}
           onTogglePosFlag={onTogglePosFlag}
+          onSetPosArtwork={onSetArtworkTarget}
         />
         <SlotInspector
           unitLabel={unit.label}
@@ -708,6 +738,19 @@ export function ShelvesClient({
         posSlots={unit.pos_slots}
         existingIssues={posIssues}
         canRequestRedelivery={canRequestRedelivery}
+      />
+
+      <PosArtworkDialog
+        open={artworkTarget !== null}
+        onClose={() => setArtworkTarget(null)}
+        siteId={unit.site_id}
+        unitId={unit.id}
+        siteUnitId={unit.id}
+        posSlot={artworkPosSlot}
+        existing={
+          artworkPosSlot ? artworkByPosSlot.get(artworkPosSlot.id) ?? null : null
+        }
+        canEdit={canEdit}
       />
 
       {pendingFlags.length > 0 && (

@@ -18,9 +18,12 @@ interface Props {
   totalSlotWidthByShelf: Map<string, number>;
   /** Ids of POS positions the user has flagged for redelivery in this session. */
   pendingFlagIds: Set<string>;
+  /** Ids of POS positions that already have an artwork assignment. */
+  artworkSetIds: Set<string>;
   onSelectSlot: (slotId: string | null) => void;
   onAddSlot: (shelfId: string) => void;
   onTogglePosFlag: (posSlotId: string, label: string) => void;
+  onSetPosArtwork: (posSlotId: string) => void;
 }
 
 type ViewBox = { x: number; y: number; w: number; h: number };
@@ -77,9 +80,11 @@ export function ShelfCanvas({
   selectedSlotId,
   totalSlotWidthByShelf,
   pendingFlagIds,
+  artworkSetIds,
   onSelectSlot,
   onAddSlot,
   onTogglePosFlag,
+  onSetPosArtwork,
 }: Props) {
   const promoById = useMemo(() => {
     const m = new Map<string, PromoSectionSummary>();
@@ -321,6 +326,7 @@ export function ShelfCanvas({
       <svg
         viewBox={fmtViewBox(viewBox)}
         preserveAspectRatio="xMidYMid meet"
+        onClick={() => onSelectSlot(null)}
         style={{
           width: '100%',
           height: 'auto',
@@ -358,7 +364,10 @@ export function ShelfCanvas({
           posSlots={headerPosSlots}
           promo={unitPromo}
           flaggedIds={pendingFlagIds}
+          artworkSetIds={artworkSetIds}
           onToggleFlag={onTogglePosFlag}
+          onSetArtwork={onSetPosArtwork}
+          canEdit={canEdit}
         />
 
         {layout.rows.map(
@@ -438,7 +447,10 @@ export function ShelfCanvas({
                     ) ?? null
                   }
                   flaggedIds={pendingFlagIds}
+                  artworkSetIds={artworkSetIds}
+                  canEdit={canEdit}
                   onToggleFlag={onTogglePosFlag}
+                  onSetArtwork={onSetPosArtwork}
                 />
 
                 {/* Shelf plate */}
@@ -457,18 +469,44 @@ export function ShelfCanvas({
                   fill="rgba(255, 255, 255, 0.12)"
                 />
 
-                {/* Shelf index in the left gutter (reversed — bottom = 1) */}
-                <text
-                  x={-14}
-                  y={(zoneTopY + zoneBottomY) / 2 + 5}
-                  fontSize={16}
-                  fontFamily="Poppins, system-ui, sans-serif"
-                  fontWeight={500}
-                  textAnchor="end"
-                  fill="#9A9A9A"
+                {/* Shelf index in the left gutter — clickable to focus
+                    that shelf (reversed label; bottom = 1). */}
+                <g
+                  style={{ cursor: 'pointer' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const idx = layout.rows.findIndex(
+                      (r) => r.shelf.id === shelf.id
+                    );
+                    if (idx < 0) return;
+                    setFocusedIndex((prev) => (prev === idx ? null : idx));
+                  }}
                 >
-                  {displayShelfLabel(shelf.shelf_order, unit.shelves.length)}
-                </text>
+                  {/* Invisible generous hit-target around the number. */}
+                  <rect
+                    x={-42}
+                    y={zoneTopY}
+                    width={40}
+                    height={zoneBottomY - zoneTopY}
+                    fill="transparent"
+                  />
+                  <text
+                    x={-14}
+                    y={(zoneTopY + zoneBottomY) / 2 + 5}
+                    fontSize={16}
+                    fontFamily="Poppins, system-ui, sans-serif"
+                    fontWeight={500}
+                    textAnchor="end"
+                    fill={
+                      focusedIndex !== null &&
+                      layout.rows[focusedIndex]?.shelf.id === shelf.id
+                        ? '#E12828'
+                        : '#9A9A9A'
+                    }
+                  >
+                    {displayShelfLabel(shelf.shelf_order, unit.shelves.length)}
+                  </text>
+                </g>
 
                 {/* Shelf budget pill in the right gutter */}
                 <ShelfBudgetPill
@@ -631,7 +669,10 @@ function HeaderZone({
   posSlots,
   promo,
   flaggedIds,
+  artworkSetIds,
+  canEdit,
   onToggleFlag,
+  onSetArtwork,
 }: {
   widthMm: number;
   unitLabel: string;
@@ -639,7 +680,10 @@ function HeaderZone({
   posSlots: UnitPosSlot[];
   promo: PromoSectionSummary | null;
   flaggedIds: Set<string>;
+  artworkSetIds: Set<string>;
+  canEdit: boolean;
   onToggleFlag: (id: string, label: string) => void;
+  onSetArtwork: (id: string) => void;
 }) {
   const titleStripMm = 48;
   const frameTop = titleStripMm + 20;
@@ -723,6 +767,8 @@ function HeaderZone({
         promo={promo}
         headerSlot={headerSlot}
         flagged={!!headerSlot && flaggedIds.has(headerSlot.id)}
+        artworkSet={!!headerSlot && artworkSetIds.has(headerSlot.id)}
+        canEdit={canEdit}
         onToggleFlag={
           headerSlot
             ? () =>
@@ -731,6 +777,9 @@ function HeaderZone({
                   `${headerSlot.pos_slot_type.display_name} (top header)`
                 )
             : undefined
+        }
+        onSetArtwork={
+          headerSlot ? () => onSetArtwork(headerSlot.id) : undefined
         }
       />
 
@@ -759,7 +808,10 @@ function PosPoster({
   promo,
   headerSlot,
   flagged,
+  artworkSet,
+  canEdit,
   onToggleFlag,
+  onSetArtwork,
 }: {
   x: number;
   y: number;
@@ -768,7 +820,10 @@ function PosPoster({
   promo: PromoSectionSummary | null;
   headerSlot: UnitPosSlot | null;
   flagged: boolean;
+  artworkSet: boolean;
+  canEdit: boolean;
   onToggleFlag?: () => void;
+  onSetArtwork?: () => void;
 }) {
   const [hover, setHover] = useState(false);
   const bg = promo?.hex_colour ?? '#FAF8F4';
@@ -849,10 +904,23 @@ function PosPoster({
         </text>
       )}
 
-      {/* Hover flag icon — absolute top-right */}
+      {/* Hover action icons — top-right corner.
+          Flag: add to bulk redelivery. Artwork: open assignment dialog.
+          Artwork badge persists once set so the user sees the state. */}
+      {canEdit && onSetArtwork && (hover || artworkSet) && (
+        <ArtworkBadge
+          cx={x + width - 20}
+          cy={y + 20}
+          set={artworkSet}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSetArtwork();
+          }}
+        />
+      )}
       {onToggleFlag && (hover || flagged) && (
         <FlagBadge
-          cx={x + width - 20}
+          cx={x + width - 20 - (canEdit && onSetArtwork ? 34 : 0)}
           cy={y + 20}
           flagged={flagged}
           onClick={(e) => {
@@ -861,6 +929,49 @@ function PosPoster({
           }}
         />
       )}
+    </g>
+  );
+}
+
+function ArtworkBadge({
+  cx,
+  cy,
+  set,
+  onClick,
+}: {
+  cx: number;
+  cy: number;
+  set: boolean;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  const r = 14;
+  return (
+    <g
+      style={{ cursor: 'pointer' }}
+      onClick={onClick}
+      role="button"
+      aria-label={set ? 'Edit POS artwork' : 'Set POS artwork'}
+    >
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill={set ? '#5DCAA5' : '#FFFFFF'}
+        stroke={set ? '#2F7B5E' : '#414042'}
+        strokeWidth={1.5}
+      />
+      <text
+        x={cx}
+        y={cy + 5}
+        fontSize={14}
+        fontFamily="Poppins, system-ui, sans-serif"
+        fontWeight={700}
+        fill={set ? '#FFFFFF' : '#414042'}
+        textAnchor="middle"
+        pointerEvents="none"
+      >
+        ✎
+      </text>
     </g>
   );
 }
@@ -925,7 +1036,10 @@ function ShelfEdge({
   hasProducts,
   posSlotForStrip,
   flaggedIds,
+  artworkSetIds,
+  canEdit,
   onToggleFlag,
+  onSetArtwork,
 }: {
   x: number;
   y: number;
@@ -936,7 +1050,10 @@ function ShelfEdge({
   hasProducts: boolean;
   posSlotForStrip: UnitPosSlot | null;
   flaggedIds: Set<string>;
+  artworkSetIds: Set<string>;
+  canEdit: boolean;
   onToggleFlag: (id: string, label: string) => void;
+  onSetArtwork: (id: string) => void;
 }) {
   const [hover, setHover] = useState(false);
   const hasPromo = !!promoHex;
@@ -1013,10 +1130,23 @@ function ShelfEdge({
           </text>
         </>
       )}
-      {/* Hover flag icon — right edge of the strip */}
+      {/* Hover/persistent action icons — right edge of the strip */}
+      {posSlotForStrip &&
+        canEdit &&
+        (hover || artworkSetIds.has(posSlotForStrip.id)) && (
+          <ArtworkBadge
+            cx={x + width - 18}
+            cy={y + height / 2}
+            set={artworkSetIds.has(posSlotForStrip.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSetArtwork(posSlotForStrip.id);
+            }}
+          />
+        )}
       {posSlotForStrip && (hover || flagged) && (
         <FlagBadge
-          cx={x + width - 18}
+          cx={x + width - 18 - (canEdit ? 34 : 0)}
           cy={y + height / 2}
           flagged={flagged}
           onClick={(e) => {

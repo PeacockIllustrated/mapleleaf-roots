@@ -268,6 +268,16 @@ export default async function ShelvesPage({ params }: Props) {
     reported_at: string;
   }>;
 
+  const { data: artworkRaw } = await supabase
+    .from('site_unit_pos_artwork')
+    .select('unit_type_pos_slot_id, artwork_url, notes')
+    .eq('site_unit_id', unitId);
+  const posArtwork = (artworkRaw ?? []) as Array<{
+    unit_type_pos_slot_id: string;
+    artwork_url: string | null;
+    notes: string | null;
+  }>;
+
   return (
     <ShelvesClient
       unit={unitWithShelves}
@@ -276,6 +286,7 @@ export default async function ShelvesPage({ params }: Props) {
       canEdit={canEdit}
       canRequestRedelivery={canRequestRedelivery}
       posIssues={posIssues}
+      posArtwork={posArtwork}
     />
   );
 }
