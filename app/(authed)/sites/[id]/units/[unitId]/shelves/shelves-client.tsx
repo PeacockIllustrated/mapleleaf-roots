@@ -32,6 +32,8 @@ import {
   reportPosIssue as reportPosIssueAction,
   requestPosRedelivery as requestPosRedeliveryAction,
 } from '@/lib/pos/actions';
+import { AttributionFooter } from '@/components/brand/AttributionFooter';
+import type { DataSourceEnum } from '@/lib/products/shared/facts-family-config';
 
 interface Props {
   unit: UnitWithShelves;
@@ -971,6 +973,19 @@ export function ShelvesClient({
         >
           {toast.message}
         </div>
+      )}
+
+      {products.length > 0 && (
+        <AttributionFooter
+          dataSources={
+            [
+              'OPEN_FOOD_FACTS',
+              'OPEN_BEAUTY_FACTS',
+              'OPEN_PRODUCTS_FACTS',
+              'OPEN_PET_FOOD_FACTS',
+            ] as DataSourceEnum[]
+          }
+        />
       )}
     </div>
   );
