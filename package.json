@@ -16,6 +16,8 @@
     "seed:verify": "tsx --env-file=.env.local scripts/verify-seed.ts",
     "products:seed": "tsx --env-file=.env.local scripts/products/seed-from-dump.ts",
     "products:nightly": "tsx --env-file=.env.local scripts/products/nightly-sync.ts",
+    "products:seed:ci": "tsx scripts/products/seed-from-dump.ts",
+    "products:nightly:ci": "tsx scripts/products/nightly-sync.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

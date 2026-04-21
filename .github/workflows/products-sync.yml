@@ -40,8 +40,8 @@ jobs:
 
       - name: Nightly delta
         if: ${{ (github.event.inputs.mode || 'delta') == 'delta' }}
-        run: pnpm products:nightly
+        run: pnpm products:nightly:ci
 
       - name: Full seed from dumps
         if: ${{ github.event.inputs.mode == 'seed' }}
-        run: pnpm products:seed
+        run: pnpm products:seed:ci
