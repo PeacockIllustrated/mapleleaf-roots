@@ -9,7 +9,8 @@
       "Bash(npm --version)",
       "Bash(docker info *)",
       "Bash(corepack --version)",
-      "Bash(corepack prepare *)"
+      "Bash(corepack prepare *)",
+      "Bash(npm run *)"
     ]
   }
 }

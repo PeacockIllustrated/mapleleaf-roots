@@ -212,6 +212,20 @@ export default async function SiteDetailPage({ params }: PageProps) {
             Open the configurator →
           </Link>
         </InfoCard>
+
+        <InfoCard title="Campaign rollouts">
+          <Link
+            href={`/sites/${typedSite.id}/rollouts`}
+            style={{
+              color: 'var(--ml-red)',
+              fontWeight: 500,
+              textDecoration: 'none',
+              letterSpacing: '0.01em',
+            }}
+          >
+            View rollouts →
+          </Link>
+        </InfoCard>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
