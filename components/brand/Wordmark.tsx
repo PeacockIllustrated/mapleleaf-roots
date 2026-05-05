@@ -82,10 +82,9 @@ function TextLockup({
       <span
         style={{
           fontSize: main,
-          fontWeight: 900,
-          fontStyle: 'italic',
+          fontWeight: 800,
           color: mainColour,
-          letterSpacing: '-0.025em',
+          letterSpacing: '-0.015em',
         }}
       >
         Mapleleaf
@@ -95,8 +94,7 @@ function TextLockup({
           fontSize: sub,
           fontWeight: 700,
           color: subColour,
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
+          letterSpacing: '-0.005em',
         }}
       >
         {divisionLabels[division]}
