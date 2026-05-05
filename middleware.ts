@@ -18,6 +18,10 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 const PUBLIC_PATHS = ['/login', '/auth/callback'];
 
+// Routes that are public to anonymous visitors but not part of the auth flow —
+// the marketing landing for the leadership/franchisee brochure.
+const PUBLIC_MARKETING_EXACT = new Set(['/', '/why-roots']);
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -49,9 +53,10 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isPublic = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
+  const isAuthFlow = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
+  const isMarketing = PUBLIC_MARKETING_EXACT.has(pathname);
 
-  if (!user && !isPublic) {
+  if (!user && !isAuthFlow && !isMarketing) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('from', pathname);
