@@ -68,6 +68,16 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 html,
 body {
   padding: 0;
@@ -114,4 +124,95 @@ button {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Marketing — responsive helpers
+   --------------------------------------------------------------------------
+   The brochure-style landing uses inline styles for component-local design
+   tokens. These class hooks are reserved for things that need a media query
+   (responsive collapse, hover, touch-only behaviours) which inline styles
+   can't express.
+   -------------------------------------------------------------------------- */
+
+/* Hide on small screens (used on the marketing header's secondary nav). */
+@media (max-width: 720px) {
+  .ml-hide-sm {
+    display: none !important;
+  }
+}
+
+/* Two-column → one-column collapse for marketing sections.
+   Children render in document order; first child is "copy", second is the
+   visual / sidebar / mockup. The "stacked first" variant flips the order on
+   narrow viewports so a mockup sits below the copy that introduces it. */
+.ml-twocol {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: 56px;
+  align-items: start;
+}
+.ml-twocol--reverse {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+}
+.ml-twocol--positioning {
+  grid-template-columns: 180px 1fr;
+  gap: 48px;
+}
+.ml-twocol--challenge {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 56px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .ml-twocol,
+  .ml-twocol--reverse,
+  .ml-twocol--positioning,
+  .ml-twocol--challenge {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+  .ml-twocol--reverse > :first-child {
+    order: 2;
+  }
+}
+
+/* Subtle pop on cards over the cream background. Inline styles already
+   define the resting state; this is purely the hover delta. */
+.ml-card {
+  transition:
+    transform var(--ml-motion-fast) var(--ml-ease-out),
+    box-shadow var(--ml-motion-fast) var(--ml-ease-out);
+}
+.ml-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(65, 64, 66, 0.10);
+}
+
+/* Configurator + planogram mockup tile chrome.
+   Background is too detailed to inline; lives here so the grid pattern only
+   compiles once and Edge-cases like Safari blur don't show seams. */
+.ml-canvas-grid {
+  background-color: #FCFAF7;
+  background-image:
+    linear-gradient(0deg, transparent 23px, var(--ml-border-default) 23px, var(--ml-border-default) 24px),
+    linear-gradient(90deg, transparent 23px, var(--ml-border-default) 23px, var(--ml-border-default) 24px);
+  background-size: 24px 24px;
+}
+
+/* Section label baseline — a thin gold rule beneath the eyebrow text on
+   marketing pages. Cheap visual anchor that ties in with the gold accents
+   used elsewhere on the page. */
+.ml-eyebrow::after {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 2px;
+  background: var(--ml-gold-mid);
+  margin-top: 6px;
+}
+
+/* Anchor jumps land below the sticky header. */
+.ml-anchor {
+  scroll-margin-top: 88px;
 }

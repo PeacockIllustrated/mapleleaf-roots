@@ -240,14 +240,7 @@ export function Challenge() {
   return (
     <SectionShell id="challenge" tone="cream">
       <SectionLabel>01 — The challenge</SectionLabel>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: 56,
-          alignItems: 'start',
-        }}
-      >
+      <div className="ml-twocol--challenge">
         <div>
           <BigDisplay>
             A franchise network <Hl>cannot be run</Hl> from a spreadsheet.
@@ -323,14 +316,7 @@ const countdownList: React.CSSProperties = {
 export function Positioning() {
   return (
     <SectionShell id="positioning" tone="cream">
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '180px 1fr',
-          gap: 48,
-          alignItems: 'start',
-        }}
-      >
+      <div className="ml-twocol--positioning">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <SectionLabel>02 — Positioning</SectionLabel>
           <span
@@ -522,13 +508,15 @@ function DivisionCard({
 }) {
   return (
     <article
+      className="ml-card"
       style={{
         position: 'relative',
         padding: '20px 22px 24px',
         background: highlight ? 'var(--ml-charcoal)' : '#FFFFFF',
         color: highlight ? '#FFFFFF' : 'var(--ml-text-primary)',
         borderRadius: 'var(--ml-radius-md)',
-        borderLeft: highlight ? '4px solid var(--ml-red)' : 'none',
+        border: highlight ? 'none' : '0.5px solid var(--ml-border-default)',
+        borderLeft: highlight ? '4px solid var(--ml-red)' : '0.5px solid var(--ml-border-default)',
         minHeight: 240,
         display: 'flex',
         flexDirection: 'column',
@@ -536,7 +524,7 @@ function DivisionCard({
         gap: 24,
         boxShadow: highlight
           ? 'none'
-          : '0 1px 0 rgba(65, 64, 66, 0.06)',
+          : '0 1px 0 rgba(65, 64, 66, 0.04)',
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -711,15 +699,18 @@ function RoleCard({
 }) {
   return (
     <article
+      className="ml-card"
       style={{
         background: '#FFFFFF',
         borderRadius: 'var(--ml-radius-md)',
+        border: '0.5px solid var(--ml-border-default)',
+        borderTop: accent ? '3px solid var(--ml-red)' : '0.5px solid var(--ml-border-default)',
         padding: '20px 20px 22px',
         display: 'flex',
         flexDirection: 'column',
         gap: 14,
         minHeight: 460,
-        boxShadow: '0 1px 0 rgba(65, 64, 66, 0.06)',
+        boxShadow: '0 1px 0 rgba(65, 64, 66, 0.04)',
       }}
     >
       <div
@@ -954,6 +945,7 @@ function ModuleCard({
 }) {
   return (
     <article
+      className="ml-card"
       style={{
         background: 'rgba(255, 255, 255, 0.04)',
         border: '0.5px solid rgba(255, 255, 255, 0.12)',
@@ -1081,14 +1073,7 @@ export function ConfiguratorSection() {
   return (
     <SectionShell id="configurator" tone="cream">
       <SectionLabel>Module 01 — Configurator</SectionLabel>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 320px) minmax(0, 1fr)',
-          gap: 56,
-          alignItems: 'start',
-        }}
-      >
+      <div className="ml-twocol">
         <div>
           <BigDisplay>The floor plan, on a drag-drop canvas.</BigDisplay>
           <p style={subhead}>
@@ -1347,10 +1332,9 @@ function ConfiguratorMockup() {
 
         {/* Canvas */}
         <div
+          className="ml-canvas-grid"
           style={{
             position: 'relative',
-            background:
-              'repeating-linear-gradient(0deg, var(--ml-off-white) 0 23px, transparent 23px 24px), repeating-linear-gradient(90deg, var(--ml-off-white) 0 23px, transparent 23px 24px), #FCFAF7',
             padding: 18,
             display: 'grid',
             gridTemplateRows: 'repeat(3, 1fr)',
@@ -1536,14 +1520,7 @@ export function PlanogramSection() {
   return (
     <SectionShell id="planogram" tone="cream">
       <SectionLabel>Module 02 — Planogram</SectionLabel>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 320px)',
-          gap: 56,
-          alignItems: 'start',
-        }}
-      >
+      <div className="ml-twocol--reverse">
         <PlanogramMockup />
 
         <div>
@@ -2196,8 +2173,10 @@ function FlowStep({
 }) {
   return (
     <li
+      className="ml-card"
       style={{
         background: '#FFFFFF',
+        border: '0.5px solid var(--ml-border-default)',
         borderRadius: 'var(--ml-radius-md)',
         padding: '14px 14px 16px',
         display: 'flex',
@@ -2205,6 +2184,7 @@ function FlowStep({
         gap: 8,
         position: 'relative',
         minHeight: 220,
+        boxShadow: '0 1px 0 rgba(65, 64, 66, 0.04)',
       }}
     >
       <span
@@ -2457,16 +2437,19 @@ function PhaseCard({
 }) {
   return (
     <article
+      className="ml-card"
       style={{
         background: highlight ? 'var(--ml-charcoal)' : '#FFFFFF',
         color: highlight ? '#FFFFFF' : 'var(--ml-text-primary)',
         borderRadius: 'var(--ml-radius-md)',
+        border: highlight ? 'none' : '0.5px solid var(--ml-border-default)',
         padding: '18px 18px 22px',
         display: 'flex',
         flexDirection: 'column',
         gap: 14,
         minHeight: 360,
         position: 'relative',
+        boxShadow: highlight ? 'none' : '0 1px 0 rgba(65, 64, 66, 0.04)',
       }}
     >
       <div
@@ -2596,7 +2579,7 @@ export function Stack() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
           gap: 56,
           alignItems: 'start',
         }}
