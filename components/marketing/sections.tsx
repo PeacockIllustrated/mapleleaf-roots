@@ -341,19 +341,9 @@ export function Positioning() {
           />
         </div>
         <div>
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 500,
-              letterSpacing: '0.14em',
-              color: 'var(--ml-text-muted)',
-              textTransform: 'uppercase',
-              display: 'block',
-              marginBottom: 12,
-            }}
-          >
-            <span style={{ color: 'var(--ml-red)', fontWeight: 700 }}>Mapleleaf</span> Roots
-          </span>
+          <div style={{ marginBottom: 14 }}>
+            <Wordmark division="roots" surface="light" size="sm" />
+          </div>
           <BigDisplay>
             Roots is the <Hl>operational nervous system</Hl> of the
             Mapleleaf franchise network.
@@ -2825,26 +2815,43 @@ export function Closing({ isAuthed }: { isAuthed: boolean }) {
         }}
       >
         <div>
-          <img
-            src="/brand/mapleleaf-icon.svg"
-            alt=""
-            aria-hidden="true"
-            style={{ display: 'block', height: 64, width: 'auto', marginBottom: 14 }}
-          />
-          <span
+          <div
             style={{
-              fontSize: 12,
-              fontWeight: 500,
-              letterSpacing: '0.14em',
-              color: 'rgba(255,255,255,0.7)',
-              textTransform: 'uppercase',
-              display: 'block',
-              marginBottom: 16,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 14,
+              marginBottom: 28,
             }}
           >
-            <span style={{ color: 'var(--ml-red)', fontWeight: 700 }}>Mapleleaf</span>{' '}
-            Roots
-          </span>
+            <img
+              src="/brand/mapleleaf-icon.svg"
+              alt=""
+              aria-hidden="true"
+              style={{ display: 'block', height: 44, width: 'auto', flexShrink: 0 }}
+            />
+            <span
+              style={{
+                width: 1,
+                alignSelf: 'stretch',
+                background: 'rgba(255, 255, 255, 0.18)',
+              }}
+              aria-hidden="true"
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 500,
+                  letterSpacing: '0.18em',
+                  textTransform: 'uppercase',
+                  color: 'rgba(255, 255, 255, 0.55)',
+                }}
+              >
+                A Mapleleaf platform
+              </span>
+              <Wordmark division="roots" surface="dark" size="md" />
+            </div>
+          </div>
           <h2
             style={{
               margin: 0,
