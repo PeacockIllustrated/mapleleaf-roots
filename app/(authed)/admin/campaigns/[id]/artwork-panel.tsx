@@ -362,32 +362,19 @@ function ArtworkRow({
           style={{
             display: 'flex',
             flexDirection: 'column',
-            gap: 6,
+            gap: 8,
           }}
         >
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input
-              type="url"
-              placeholder="Artwork URL (PDF/PNG)"
-              value={artworkUrl}
-              onChange={(e) => setArtworkUrl(e.target.value)}
-              style={{ ...inputStyle, flex: 1 }}
+          {artworkUrl ? (
+            <ArtworkPreview
+              url={artworkUrl}
+              onReplace={onUpload}
+              onClear={() => setArtworkUrl('')}
+              uploading={uploading}
             />
-            <label style={fileButton}>
-              {uploading ? 'Uploading…' : 'Upload'}
-              <input
-                type="file"
-                accept="application/pdf,image/png,image/jpeg,image/webp"
-                disabled={uploading}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void onUpload(f);
-                  e.target.value = '';
-                }}
-                style={{ display: 'none' }}
-              />
-            </label>
-          </div>
+          ) : (
+            <UploadDropzone onFile={onUpload} uploading={uploading} />
+          )}
           <div
             style={{
               display: 'grid',
@@ -436,24 +423,9 @@ function ArtworkRow({
           )}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {existing?.artwork_url ? (
-            <a
-              href={existing.artwork_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                fontSize: 12,
-                color: 'var(--ml-red)',
-                textDecoration: 'none',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                maxWidth: 340,
-              }}
-            >
-              {existing.artwork_url}
-            </a>
+            <ArtworkPreview url={existing.artwork_url} readOnly />
           ) : (
             <span style={{ fontSize: 12, color: 'var(--ml-text-muted)' }}>
               No artwork uploaded.
@@ -481,6 +453,249 @@ function ArtworkRow({
   );
 }
 
+// ---------------------------------------------------------------------------
+
+function UploadDropzone({
+  onFile,
+  uploading,
+}: {
+  onFile: (file: File) => void | Promise<void>;
+  uploading: boolean;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+
+  function onDrop(e: React.DragEvent<HTMLLabelElement>) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) void onFile(file);
+  }
+
+  return (
+    <label
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={onDrop}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        padding: '14px 16px',
+        minHeight: 72,
+        background: dragOver
+          ? 'rgba(225, 40, 40, 0.04)'
+          : 'var(--ml-off-white)',
+        border: dragOver
+          ? '1px dashed var(--ml-red)'
+          : '1px dashed var(--ml-border-default)',
+        borderRadius: 'var(--ml-radius-md)',
+        cursor: uploading ? 'wait' : 'pointer',
+        transition:
+          'background var(--ml-motion-fast) var(--ml-ease-out), border-color var(--ml-motion-fast) var(--ml-ease-out)',
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'inline-flex',
+          width: 28,
+          height: 28,
+          borderRadius: '50%',
+          background: 'var(--ml-surface-muted)',
+          color: 'var(--ml-charcoal)',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 14,
+          fontWeight: 600,
+          flexShrink: 0,
+        }}
+      >
+        {uploading ? '…' : '+'}
+      </span>
+      <span
+        style={{
+          fontSize: 12,
+          color: 'var(--ml-text-primary)',
+          lineHeight: 1.35,
+        }}
+      >
+        {uploading ? (
+          'Uploading…'
+        ) : (
+          <>
+            <span style={{ fontWeight: 500 }}>Click to upload</span>{' '}
+            <span style={{ color: 'var(--ml-text-muted)' }}>
+              or drop a PDF / PNG / JPG here
+            </span>
+          </>
+        )}
+      </span>
+      <input
+        type="file"
+        accept="application/pdf,image/png,image/jpeg,image/webp"
+        disabled={uploading}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void onFile(f);
+          e.target.value = '';
+        }}
+        style={{ display: 'none' }}
+      />
+    </label>
+  );
+}
+
+function ArtworkPreview({
+  url,
+  onReplace,
+  onClear,
+  uploading,
+  readOnly,
+}: {
+  url: string;
+  onReplace?: (file: File) => void | Promise<void>;
+  onClear?: () => void;
+  uploading?: boolean;
+  readOnly?: boolean;
+}) {
+  const isPdf = /\.pdf(\?|$)/i.test(url);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: 8,
+        background: 'var(--ml-off-white)',
+        border: '0.5px solid var(--ml-border-default)',
+        borderRadius: 'var(--ml-radius-md)',
+      }}
+    >
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 48,
+          height: 48,
+          borderRadius: 'var(--ml-radius-sm)',
+          background: 'var(--ml-surface-muted)',
+          overflow: 'hidden',
+          flexShrink: 0,
+          textDecoration: 'none',
+          color: 'var(--ml-charcoal)',
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: '0.04em',
+        }}
+        aria-label="Open artwork in new tab"
+      >
+        {isPdf ? (
+          'PDF'
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={url}
+            alt=""
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        )}
+      </a>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 500,
+            color: 'var(--ml-text-primary)',
+          }}
+        >
+          Artwork uploaded
+        </span>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: 11,
+            color: 'var(--ml-text-muted)',
+            textDecoration: 'none',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          View file →
+        </a>
+      </div>
+      {!readOnly && (
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <label
+            style={{
+              padding: '6px 10px',
+              fontSize: 11,
+              fontWeight: 500,
+              background: 'var(--ml-surface-panel)',
+              border: '1px solid var(--ml-border-default)',
+              borderRadius: 'var(--ml-radius-md)',
+              cursor: uploading ? 'wait' : 'pointer',
+            }}
+          >
+            {uploading ? 'Uploading…' : 'Replace'}
+            <input
+              type="file"
+              accept="application/pdf,image/png,image/jpeg,image/webp"
+              disabled={uploading}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f && onReplace) void onReplace(f);
+                e.target.value = '';
+              }}
+              style={{ display: 'none' }}
+            />
+          </label>
+          {onClear && (
+            <button
+              type="button"
+              onClick={onClear}
+              disabled={uploading}
+              style={{
+                padding: '6px 10px',
+                fontSize: 11,
+                fontWeight: 500,
+                background: 'transparent',
+                color: 'var(--ml-text-muted)',
+                border: '1px solid var(--ml-border-default)',
+                borderRadius: 'var(--ml-radius-md)',
+                cursor: 'pointer',
+              }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 const inputStyle: React.CSSProperties = {
   padding: '7px 10px',
   fontFamily: 'inherit',
@@ -490,20 +705,6 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid var(--ml-border-default)',
   borderRadius: 'var(--ml-radius-md)',
   minWidth: 0,
-};
-
-const fileButton: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '7px 12px',
-  fontSize: 11,
-  fontWeight: 500,
-  color: 'var(--ml-charcoal)',
-  background: 'var(--ml-surface-panel)',
-  border: '1px solid var(--ml-border-default)',
-  borderRadius: 'var(--ml-radius-md)',
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
 };
 
 const saveButton: React.CSSProperties = {

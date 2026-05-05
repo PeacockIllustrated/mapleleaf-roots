@@ -49,7 +49,14 @@ const items: readonly Item[] = [
     href: '/admin/library/units',
     label: 'Library',
     icon: <IconLibrary />,
-    match: (p) => p.startsWith('/admin'),
+    match: (p) => p.startsWith('/admin/library'),
+    visibleTo: ['HQ_ADMIN'],
+  },
+  {
+    href: '/admin/campaigns',
+    label: 'Campaigns',
+    icon: <IconCampaigns />,
+    match: (p) => p.startsWith('/admin/campaigns'),
     visibleTo: ['HQ_ADMIN'],
   },
 ];
@@ -324,6 +331,20 @@ function IconLibrary() {
         stroke="currentColor"
         strokeWidth={1.6}
         strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconCampaigns() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <path
+        d="M4 10v4l11 5V5zM15 9a3 3 0 0 1 0 6"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+        strokeLinecap="round"
       />
     </svg>
   );
