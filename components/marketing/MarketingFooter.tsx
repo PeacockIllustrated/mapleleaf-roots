@@ -57,12 +57,12 @@ export function MarketingFooter() {
           <FooterStatic style={{ color: '#FFFFFF', fontWeight: 500 }}>
             Onesign &amp; Digital
           </FooterStatic>
-          <FooterStatic>Project lead — Michael Peacock</FooterStatic>
+          <FooterStatic>Project lead — Tom Peacock</FooterStatic>
           <a
-            href="mailto:michael@onesign.co.uk"
+            href="mailto:tom@onesignanddigital.com"
             style={{ ...footerLinkStyle, color: 'var(--ml-gold-mid)' }}
           >
-            michael@onesign.co.uk
+            tom@onesignanddigital.com
           </a>
         </div>
       </div>

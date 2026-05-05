@@ -2901,7 +2901,7 @@ export function Closing({ isAuthed }: { isAuthed: boolean }) {
               {isAuthed ? 'Open the app →' : 'Sign in →'}
             </Link>
             <a
-              href="mailto:michael@onesign.co.uk?subject=Mapleleaf%20Roots%20%E2%80%94%20Phase%202%20scoping"
+              href="mailto:tom@onesignanddigital.com?subject=Mapleleaf%20Roots%20%E2%80%94%20Phase%202%20scoping"
               style={{
                 padding: '12px 22px',
                 background: 'transparent',
@@ -3007,12 +3007,12 @@ export function Closing({ isAuthed }: { isAuthed: boolean }) {
           >
             <div>
               <span style={contactLabel}>Project lead</span>
-              <span style={contactValue}>Michael Peacock</span>
+              <span style={contactValue}>Tom Peacock</span>
               <a
-                href="mailto:michael@onesign.co.uk"
+                href="mailto:tom@onesignanddigital.com"
                 style={{ ...contactValue, color: 'var(--ml-gold-mid)' }}
               >
-                michael@onesign.co.uk
+                tom@onesignanddigital.com
               </a>
             </div>
             <div>
