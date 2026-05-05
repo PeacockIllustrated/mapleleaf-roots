@@ -1,10 +1,13 @@
 name: Products — nightly Facts-family delta
 
 on:
-  schedule:
-    # 02:00 UTC (03:00 BST / 02:00 GMT). OFF's dump regenerates around
-    # 00:00 UTC so this gives us a fresh feed to pull deltas against.
-    - cron: '0 2 * * *'
+  # Nightly cron disabled while reverting to the curated INTERNAL_CATALOGUE
+  # baseline (see migration 20260505_010). Re-enable by uncommenting the
+  # schedule block below once sync quality is addressed.
+  # schedule:
+  #   # 02:00 UTC (03:00 BST / 02:00 GMT). OFF's dump regenerates around
+  #   # 00:00 UTC so this gives us a fresh feed to pull deltas against.
+  #   - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       mode:
