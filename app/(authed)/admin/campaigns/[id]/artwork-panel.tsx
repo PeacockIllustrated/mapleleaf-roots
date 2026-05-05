@@ -317,137 +317,303 @@ function ArtworkRow({
   return (
     <div
       style={{
-        padding: '12px 16px',
-        display: 'grid',
-        gridTemplateColumns: '220px 1fr auto',
-        gap: 14,
-        alignItems: 'center',
+        padding: '16px 18px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
       }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 500,
-            color: 'var(--ml-text-primary)',
-          }}
-        >
-          {posSlotType?.display_name ?? 'Unknown slot'}
-        </span>
-        <span
-          style={{
-            fontSize: 10,
-            color: 'var(--ml-text-muted)',
-            fontFamily: 'ui-monospace, Menlo, monospace',
-          }}
-        >
-          {posSlotType
-            ? `${posSlotType.width_mm}×${posSlotType.height_mm} mm · ${posSlotType.default_material.toLowerCase()}`
-            : ''}
-        </span>
-        {existing?.target_promo_section_id && (
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span
             style={{
-              fontSize: 10,
-              color: 'var(--ml-text-muted)',
+              fontSize: 13,
+              fontWeight: 500,
+              color: 'var(--ml-text-primary)',
             }}
           >
-            Promo: {promoById.get(existing.target_promo_section_id)?.display_name}
+            {posSlotType?.display_name ?? 'Unknown slot'}
           </span>
+          <span
+            style={{
+              fontSize: 11,
+              color: 'var(--ml-text-muted)',
+              fontFamily: 'ui-monospace, Menlo, monospace',
+            }}
+          >
+            {posSlotType
+              ? `${posSlotType.width_mm}×${posSlotType.height_mm} mm · ${posSlotType.default_material
+                  .toLowerCase()
+                  .replace(/_/g, ' ')}`
+              : ''}
+          </span>
+          {existing?.target_promo_section_id && (
+            <span
+              style={{
+                marginTop: 2,
+                fontSize: 10,
+                fontWeight: 500,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                color: 'var(--ml-charcoal)',
+                background: 'var(--ml-surface-muted)',
+                padding: '2px 8px',
+                borderRadius: 9999,
+                width: 'fit-content',
+              }}
+            >
+              Only {promoById.get(existing.target_promo_section_id)?.display_name}
+            </span>
+          )}
+        </div>
+        {editable && (
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={isPending || uploading}
+            style={saveButton}
+          >
+            {isPending ? 'Saving…' : existing ? 'Save changes' : 'Add'}
+          </button>
         )}
-      </div>
+      </header>
+
+      {/* Hero artwork preview */}
+      {artworkUrl ? (
+        <ArtworkHero
+          url={artworkUrl}
+          aspect={
+            posSlotType
+              ? `${posSlotType.width_mm} / ${posSlotType.height_mm}`
+              : '16 / 9'
+          }
+          editable={editable}
+          uploading={uploading}
+          onReplace={onUpload}
+          onClear={() => setArtworkUrl('')}
+        />
+      ) : editable ? (
+        <UploadDropzone onFile={onUpload} uploading={uploading} />
+      ) : (
+        <div
+          style={{
+            padding: '24px 16px',
+            background: 'var(--ml-surface-muted)',
+            borderRadius: 'var(--ml-radius-md)',
+            textAlign: 'center',
+            fontSize: 12,
+            color: 'var(--ml-text-muted)',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+          }}
+        >
+          No artwork uploaded yet.
+        </div>
+      )}
 
       {editable ? (
         <div
           style={{
-            display: 'flex',
-            flexDirection: 'column',
+            display: 'grid',
+            gridTemplateColumns: '90px 1fr 1.4fr',
             gap: 8,
           }}
         >
-          {artworkUrl ? (
-            <ArtworkPreview
-              url={artworkUrl}
-              onReplace={onUpload}
-              onClear={() => setArtworkUrl('')}
-              uploading={uploading}
-            />
-          ) : (
-            <UploadDropzone onFile={onUpload} uploading={uploading} />
-          )}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '90px 1fr 1fr',
-              gap: 6,
-            }}
+          <input
+            type="number"
+            min={1}
+            value={quantity}
+            onChange={(e) =>
+              setQuantity(Math.max(1, Number(e.target.value) || 1))
+            }
+            title="Qty per target"
+            style={inputStyle}
+          />
+          <select
+            value={promoSectionId}
+            onChange={(e) => setPromoSectionId(e.target.value)}
+            style={inputStyle}
+            title="Promo-section-specific artwork (optional)"
           >
-            <input
-              type="number"
-              min={1}
-              value={quantity}
-              onChange={(e) =>
-                setQuantity(Math.max(1, Number(e.target.value) || 1))
-              }
-              title="Qty per target"
-              style={inputStyle}
-            />
-            <select
-              value={promoSectionId}
-              onChange={(e) => setPromoSectionId(e.target.value)}
-              style={inputStyle}
-              title="Promo-section-specific artwork (optional)"
-            >
-              <option value="">Generic (all promo sections)</option>
-              {promoSections.map((p) => (
-                <option key={p.id} value={p.id}>
-                  Only {p.display_name}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              placeholder="Notes (optional)"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              style={inputStyle}
-            />
-          </div>
-          {error && (
-            <span
-              role="alert"
-              style={{ fontSize: 11, color: 'var(--ml-red)' }}
-            >
-              {error}
-            </span>
-          )}
+            <option value="">Generic (all promo sections)</option>
+            {promoSections.map((p) => (
+              <option key={p.id} value={p.id}>
+                Only {p.display_name}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            placeholder="Notes (optional)"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            style={inputStyle}
+          />
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {existing?.artwork_url ? (
-            <ArtworkPreview url={existing.artwork_url} readOnly />
-          ) : (
-            <span style={{ fontSize: 12, color: 'var(--ml-text-muted)' }}>
-              No artwork uploaded.
-            </span>
-          )}
-          {existing?.notes && (
-            <span style={{ fontSize: 11, color: 'var(--ml-text-muted)' }}>
-              {existing.notes}
-            </span>
-          )}
-        </div>
+        existing?.notes && (
+          <span style={{ fontSize: 12, color: 'var(--ml-text-muted)' }}>
+            {existing.notes}
+          </span>
+        )
       )}
 
-      {editable && (
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={isPending || uploading}
-          style={saveButton}
+      {error && (
+        <span
+          role="alert"
+          style={{ fontSize: 11, color: 'var(--ml-red)' }}
         >
-          {isPending ? 'Saving…' : existing ? 'Save' : 'Add'}
-        </button>
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * ArtworkHero — large, true-to-aspect-ratio preview of the uploaded artwork.
+ * Hovering reveals Replace / Remove actions when editable.
+ */
+function ArtworkHero({
+  url,
+  aspect,
+  editable,
+  uploading,
+  onReplace,
+  onClear,
+}: {
+  url: string;
+  aspect: string;
+  editable: boolean;
+  uploading: boolean;
+  onReplace: (file: File) => void | Promise<void>;
+  onClear: () => void;
+}) {
+  const isPdf = /\.pdf(\?|$)/i.test(url);
+  return (
+    <div
+      style={{
+        position: 'relative',
+        background:
+          'repeating-linear-gradient(45deg, var(--ml-off-white) 0 8px, var(--ml-surface-muted) 8px 16px)',
+        border: '0.5px solid var(--ml-border-default)',
+        borderRadius: 'var(--ml-radius-md)',
+        overflow: 'hidden',
+        minHeight: 140,
+      }}
+    >
+      <div
+        style={{
+          aspectRatio: aspect,
+          maxHeight: 360,
+          margin: '0 auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 16,
+        }}
+      >
+        {isPdf ? (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              background: 'var(--ml-surface-panel)',
+              border: '0.5px solid var(--ml-border-default)',
+              borderRadius: 'var(--ml-radius-md)',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: '0.12em',
+                color: 'var(--ml-charcoal)',
+              }}
+            >
+              PDF
+            </span>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: 11, color: 'var(--ml-red)', textDecoration: 'none' }}
+            >
+              Open in new tab →
+            </a>
+          </div>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={url}
+            alt=""
+            style={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain',
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
+              borderRadius: 4,
+              background: 'var(--ml-cream, #F7F5F0)',
+            }}
+          />
+        )}
+      </div>
+      {editable && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            display: 'flex',
+            gap: 6,
+          }}
+        >
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={ghostPillButton}
+            onClick={(e) => e.stopPropagation()}
+          >
+            Open
+          </a>
+          <label style={pillButton}>
+            {uploading ? 'Uploading…' : 'Replace'}
+            <input
+              type="file"
+              accept="application/pdf,image/png,image/jpeg,image/webp,image/svg+xml"
+              disabled={uploading}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void onReplace(f);
+                e.target.value = '';
+              }}
+              style={{ display: 'none' }}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={onClear}
+            disabled={uploading}
+            style={ghostPillButton}
+          >
+            Remove
+          </button>
+        </div>
       )}
     </div>
   );
@@ -549,152 +715,28 @@ function UploadDropzone({
   );
 }
 
-function ArtworkPreview({
-  url,
-  onReplace,
-  onClear,
-  uploading,
-  readOnly,
-}: {
-  url: string;
-  onReplace?: (file: File) => void | Promise<void>;
-  onClear?: () => void;
-  uploading?: boolean;
-  readOnly?: boolean;
-}) {
-  const isPdf = /\.pdf(\?|$)/i.test(url);
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: 8,
-        background: 'var(--ml-off-white)',
-        border: '0.5px solid var(--ml-border-default)',
-        borderRadius: 'var(--ml-radius-md)',
-      }}
-    >
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 48,
-          height: 48,
-          borderRadius: 'var(--ml-radius-sm)',
-          background: 'var(--ml-surface-muted)',
-          overflow: 'hidden',
-          flexShrink: 0,
-          textDecoration: 'none',
-          color: 'var(--ml-charcoal)',
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: '0.04em',
-        }}
-        aria-label="Open artwork in new tab"
-      >
-        {isPdf ? (
-          'PDF'
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={url}
-            alt=""
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        )}
-      </a>
-      <div
-        style={{
-          flex: 1,
-          minWidth: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 2,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 500,
-            color: 'var(--ml-text-primary)',
-          }}
-        >
-          Artwork uploaded
-        </span>
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            fontSize: 11,
-            color: 'var(--ml-text-muted)',
-            textDecoration: 'none',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          View file →
-        </a>
-      </div>
-      {!readOnly && (
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <label
-            style={{
-              padding: '6px 10px',
-              fontSize: 11,
-              fontWeight: 500,
-              background: 'var(--ml-surface-panel)',
-              border: '1px solid var(--ml-border-default)',
-              borderRadius: 'var(--ml-radius-md)',
-              cursor: uploading ? 'wait' : 'pointer',
-            }}
-          >
-            {uploading ? 'Uploading…' : 'Replace'}
-            <input
-              type="file"
-              accept="application/pdf,image/png,image/jpeg,image/webp"
-              disabled={uploading}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f && onReplace) void onReplace(f);
-                e.target.value = '';
-              }}
-              style={{ display: 'none' }}
-            />
-          </label>
-          {onClear && (
-            <button
-              type="button"
-              onClick={onClear}
-              disabled={uploading}
-              style={{
-                padding: '6px 10px',
-                fontSize: 11,
-                fontWeight: 500,
-                background: 'transparent',
-                color: 'var(--ml-text-muted)',
-                border: '1px solid var(--ml-border-default)',
-                borderRadius: 'var(--ml-radius-md)',
-                cursor: 'pointer',
-              }}
-            >
-              Remove
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
+
+const pillButton: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '5px 11px',
+  fontSize: 11,
+  fontWeight: 500,
+  color: 'var(--ml-charcoal)',
+  background: 'rgba(255, 255, 255, 0.92)',
+  border: '0.5px solid var(--ml-border-default)',
+  borderRadius: 9999,
+  textDecoration: 'none',
+  cursor: 'pointer',
+  backdropFilter: 'blur(4px)',
+  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.06)',
+};
+
+const ghostPillButton: React.CSSProperties = {
+  ...pillButton,
+  color: 'var(--ml-text-muted)',
+};
 
 const inputStyle: React.CSSProperties = {
   padding: '7px 10px',

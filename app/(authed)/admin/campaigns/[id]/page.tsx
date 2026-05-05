@@ -276,6 +276,14 @@ export default async function CampaignDetailPage({ params }: Props) {
         )}
       </header>
 
+      {artworkList.length > 0 && (
+        <ArtworkGalleryStrip
+          artwork={artworkList}
+          posSlotTypes={posSlotTypeList}
+          unitTypes={unitTypeList}
+        />
+      )}
+
       <div
         style={{
           display: 'grid',
@@ -415,6 +423,161 @@ export default async function CampaignDetailPage({ params }: Props) {
         </div>
       </div>
     </div>
+  );
+}
+
+function ArtworkGalleryStrip({
+  artwork,
+  posSlotTypes,
+  unitTypes,
+}: {
+  artwork: CampaignArtwork[];
+  posSlotTypes: PosSlotType[];
+  unitTypes: UnitType[];
+}) {
+  const slotById = new Map(posSlotTypes.map((p) => [p.id, p]));
+  const utById = new Map(unitTypes.map((u) => [u.id, u]));
+
+  return (
+    <section
+      style={{
+        background: 'var(--ml-charcoal)',
+        borderRadius: 'var(--ml-radius-lg)',
+        padding: '20px 22px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          gap: 10,
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              color: 'rgba(255, 255, 255, 0.6)',
+            }}
+          >
+            Artwork pack
+          </span>
+          <span
+            style={{
+              fontSize: 16,
+              fontWeight: 500,
+              color: '#FFFFFF',
+            }}
+          >
+            {artwork.length} {artwork.length === 1 ? 'piece' : 'pieces'} ready
+            for production
+          </span>
+        </div>
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+          gap: 12,
+        }}
+      >
+        {artwork.map((a) => {
+          const slot = slotById.get(a.pos_slot_type_id);
+          const unit = utById.get(a.unit_type_id);
+          const aspect = slot
+            ? `${slot.width_mm} / ${slot.height_mm}`
+            : '4 / 3';
+          return (
+            <a
+              key={a.id}
+              href={a.artwork_url ?? '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                textDecoration: 'none',
+                color: 'inherit',
+              }}
+            >
+              <div
+                style={{
+                  aspectRatio: aspect,
+                  background:
+                    'repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0 8px, rgba(255,255,255,0.02) 8px 16px)',
+                  border: '0.5px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: 'var(--ml-radius-md)',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 10,
+                }}
+              >
+                {a.artwork_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={a.artwork_url}
+                    alt=""
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      objectFit: 'contain',
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+                      borderRadius: 2,
+                    }}
+                  />
+                ) : (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: 'rgba(255,255,255,0.4)',
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Empty
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 500,
+                    color: '#FFFFFF',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {slot?.display_name ?? 'POS slot'}
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    color: 'rgba(255, 255, 255, 0.55)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {unit?.display_name ?? ''}
+                </span>
+              </div>
+            </a>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
